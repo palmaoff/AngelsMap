@@ -744,20 +744,17 @@ const MapApp = (function () {
   // openSettings) — тот же #settingsOverlay делит между собой панель слоёв
   // и вкладка «Отчёты» (см. reports.js: openReportSettings), поэтому сама
   // модалка не знает про layerState и получает только descriptor.
-  // Слои с длинной формой фильтров (десятки полей) — не помещаются в стандартную
-  // ширину модалки настроек (см. .modal--wide в css/styles.css). Известно заранее на
-  // клиенте, не дожидаясь ответа сервера: список id в BackendPlugin.wideSettingsLayers
-  // (раньше — захардкоженный здесь набор слоёв accident-analysis) либо флаг
-  // wideSettings:true в метаданных слоя из /layers.
-  function isWideSettingsLayer(st) {
-    return !!(st.meta.wideSettings || (BackendPlugin.wideSettingsLayers || []).includes(st.meta.id));
-  }
+  // Слои, чьи фильтры перенесены с нативной карты "в полном объёме" (см. корневой
+  // CLAUDE.md, map-api) — десятки полей, не помещаются в стандартную ширину модалки
+  // настроек (см. .modal--wide в css/styles.css). Известно заранее на клиенте, не
+  // дожидаясь ответа сервера, — остальные 12 слоёв остаются в узкой модалке.
+  const WIDE_SETTINGS_LAYERS = new Set(['ДТП', 'Дислокации', 'УчасткиДороги']);
 
   function openLayerSettings(id) {
     const st = layerState[id];
     SettingsForm.openSettings({
       title: `Настройки слоя «${st.meta.label}»`,
-      wide: isWideSettingsLayer(st),
+      wide: WIDE_SETTINGS_LAYERS.has(id),
       load: () => MapAPI.getLayerSettings(id),
       save: values => MapAPI.saveLayerSettings(id, values),
       onApplied: async () => {
@@ -1206,16 +1203,15 @@ const MapApp = (function () {
     // если «швы» заливки на полигонах мешают, а на линиях — нет.
     const vgFlag = meta.type === 'line' ? 'vectorTilesLines'
                   : meta.type === 'polygon' ? 'vectorTilesPolygons' : null;
-    // Слой с воспроизведением трека (isPlaybackLayer, раньше — захардкоженный
-    // id 'Треки') — исключение из VG-пути: воспроизведение (см.
+    // "Треки" — исключение из VG-пути: воспроизведение трека (см.
     // "Воспроизведение трека" ниже, trackPoints()) читает геометрию через
-    // findLayer(layerId, id).getLatLngs(), которому нужен настоящий
+    // findLayer('Треки', id).getLatLngs(), которому нужен настоящий
     // per-объектный L.polyline — VG-группа не итерируется (findLayer()
     // возвращает null для неё), так что при vectorTilesLines:true кнопки
     // скорости молча ничего не делали (playTrack получал 0 точек и выходил
     // по points.length < 2). На traffic-monitor это единственный line-слой,
     // где это бьёт — на accident-analysis слоя "Треки" нет вовсе.
-    if (vgFlag && MapConfig.perf && MapConfig.perf[vgFlag] && !isPlaybackLayer(meta)) {
+    if (vgFlag && MapConfig.perf && MapConfig.perf[vgFlag] && meta.id !== 'Треки') {
       return buildVectorGridGroup(st, data);
     }
 
@@ -2138,23 +2134,6 @@ const MapApp = (function () {
   let playbackToken = 0;
   let playbackMarker = null;
 
-  // Какие слои умеют воспроизведение — флаг playback:true в метаданных слоя из
-  // /layers (его шлёт, например, clean-roads) либо id в BackendPlugin.trackPlayback.
-  // layers. Раньше ядро узнавало такой слой по захардкоженному id 'Треки'.
-  function isPlaybackLayer(meta) {
-    if (!meta) return false;
-    const cfg = BackendPlugin.trackPlayback || {};
-    return meta.playback === true || (cfg.layers || []).includes(meta.id);
-  }
-
-  // Картинка маркера воспроизведения — BackendPlugin.trackPlayback.icon (та же
-  // форма { src, width, height, anchorX, anchorY }, что у canvasIcons). Раньше —
-  // захардкоженная canvasIcons['Автобусы']; у плагина без неё (clean-roads) это
-  // роняло воспроизведение на iconDef.width. Без картинки — обычный кружок.
-  function playbackIconDef() {
-    return (BackendPlugin.trackPlayback || {}).icon || null;
-  }
-
   // Точки трека в порядке движения. L.Polyline.getLatLngs() у линии с
   // несколькими "участками" (см. АнгелКартографияВнешнееAPI.ДанныеСлояТреки)
   // возвращает вложенный по участкам массив — сплющиваем в один маршрут.
@@ -2162,44 +2141,39 @@ const MapApp = (function () {
   // ФормированиеТрекаИзКоординат: "первая координата участка = предыдущая
   // координата") — соседние повторы схлопываем, чтобы не тратить кадр
   // анимации на слайд длиной в 0 метров.
-  function trackPoints(layerId, objId) {
-    const target = findLayer(layerId, objId);
+  function trackPoints(objId) {
+    const target = findLayer('Треки', objId);
     if (!target || !target.getLatLngs) return [];
 
     const flat = target.getLatLngs().flat(Infinity);
     return flat.filter((p, i) => i === 0 || !p.equals(flat[i - 1]));
   }
 
-  async function playTrack(layerId, objId, speed) {
+  async function playTrack(objId, speed) {
     stopTrackPlayback();
 
-    const points = trackPoints(layerId, objId);
+    const points = trackPoints(objId);
     if (points.length < 2) return;
 
     const token = ++playbackToken;
     const duration = 1000 / speed;
 
-    const iconDef = playbackIconDef();
-    if (iconDef) {
-      try {
-        await loadCanvasIcon(iconDef.src);
-      } catch (e) {
-        console.error('Воспроизведение трека: не удалось загрузить иконку', e);
-        return;
-      }
+    try {
+      await ensureCanvasIconsLoaded('Автобусы');
+    } catch (e) {
+      console.error('Воспроизведение трека: не удалось загрузить иконку автобуса', e);
+      return;
     }
     if (playbackToken !== token) return; // успели остановить, пока грузилась иконка
 
-    playbackMarker = (iconDef
-      ? new CanvasIconMarker(points[0], {
-          renderer: getCanvasIconRenderer(),                   // всегда canvas, см. buildPointMarker
-          radius: Math.max(iconDef.width, iconDef.height) / 2,
-          image: canvasIconReady[iconDef.src],
-          width: iconDef.width, height: iconDef.height,
-          anchorX: iconDef.anchorX, anchorY: iconDef.anchorY
-        })
-      : L.circleMarker(points[0], { radius: 7, weight: 2, color: '#fff', fillColor: SELECT_COLOR, fillOpacity: 1 })
-    ).addTo(map);
+    const iconDef = BackendPlugin.canvasIcons['Автобусы'];
+    playbackMarker = new CanvasIconMarker(points[0], {
+      renderer: getCanvasIconRenderer(),                   // всегда canvas, см. buildPointMarker
+      radius: Math.max(iconDef.width, iconDef.height) / 2,
+      image: canvasIconReady[iconDef.src],
+      width: iconDef.width, height: iconDef.height,
+      anchorX: iconDef.anchorX, anchorY: iconDef.anchorY
+    }).addTo(map);
 
     setPlaybackUI(true);
 
@@ -2301,7 +2275,7 @@ const MapApp = (function () {
           <div class="detail__name">${d.title || d.id}</div>
         </div>
         <div class="detail__html">${d.html || '<div class="detail__row"><dd>Нет данных</dd></div>'}</div>
-        ${isPlaybackLayer(layerState[layerId] && layerState[layerId].meta) ? renderPlaybackBar(layerId, d.id) : ''}
+        ${layerId === 'Треки' ? renderPlaybackBar(d.id) : ''}
       </div>`;
   }
 
@@ -2317,12 +2291,12 @@ const MapApp = (function () {
       </div>`;
   }
 
-  // Кнопки воспроизведения — только у слоя с воспроизведением (isPlaybackLayer, см.
-  // секцию "Воспроизведение трека" выше). layerId/objId — те же id, что уже
-  // используют findLayer/getObjectDetails, просто прокидываются в MapApp.playTrack.
-  function renderPlaybackBar(layerId, objId) {
+  // Кнопки воспроизведения — только у слоя "Треки" (см. секцию "Воспроизведение
+  // трека" выше). objId — то же id объекта, что уже используют findLayer/
+  // getObjectDetails, просто прокидывается дальше в MapApp.playTrack.
+  function renderPlaybackBar(objId) {
     const speedButtons = [1, 2, 4, 10].map(s =>
-      `<button class="btn speed-btn" data-speed="${s}" onclick="MapApp.playTrack('${layerId}', '${objId}', ${s})">${s}×</button>`
+      `<button class="btn speed-btn" data-speed="${s}" onclick="MapApp.playTrack('${objId}', ${s})">${s}×</button>`
     ).join('');
     return `
       <div class="detail__playback">

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Карта</title>
+  <title>Ангел · Карта</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
   <!-- Библиотеки (vendored, работают offline / в закрытом контуре) -->
@@ -12,7 +12,7 @@
        js/map.js RealMarkerLayerHandle/ensureRealMarkerCluster -->
   <link rel="stylesheet" href="lib/MarkerCluster.css">
   <link rel="stylesheet" href="lib/MarkerCluster.Default.css">
-  <link rel="stylesheet" href="css/styles.css?v=67">
+  <link rel="stylesheet" href="css/styles.css?v=66">
 </head>
 <body>
   <!-- Статичная разметка — рисуется сразу вместе с первым кадром страницы,
@@ -24,7 +24,12 @@
     <div class="boot-screen__mark">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path fill="#2b57d4" d="M12 1.5C7.86 1.5 4.5 4.86 4.5 9c0 5.7 7.5 13.5 7.5 13.5S19.5 14.7 19.5 9c0-4.14-3.36-7.5-7.5-7.5z"/>
-        <circle cx="12" cy="9" r="3.2" fill="#ffffff"/>
+        <circle cx="12" cy="9.2" r="4.6" fill="#ffffff"/>
+        <rect x="7.9" y="6.9" width="8.2" height="5" rx="1.4" fill="#2b57d4"/>
+        <rect x="8.7" y="7.7" width="2.6" height="1.9" rx="0.3" fill="#ffffff"/>
+        <rect x="12.7" y="7.7" width="2.6" height="1.9" rx="0.3" fill="#ffffff"/>
+        <circle cx="9.6" cy="11.9" r="0.95" fill="#1b2434"/>
+        <circle cx="14.4" cy="11.9" r="0.95" fill="#1b2434"/>
       </svg>
     </div>
     <div class="boot-screen__spinner"></div>
@@ -51,39 +56,41 @@
        только при MapConfig.perf.vectorTilesLines/vectorTilesPolygons=true
        (см. js/map.js buildVectorGridGroup) -->
   <script src="lib/Leaflet.VectorGrid.bundled.js"></script>
-  <script src="js/config.js?v=8"></script>
+  <script src="js/config.js?v=7"></script>
 
   <!-- Общие SVG-примитивы графиков (dashboard.js + rich-report.js) — должен
        грузиться раньше обоих потребителей, см. js/chart-kit.js шапку. -->
-  <script src="js/chart-kit.js?v=12"></script>
+  <script src="js/chart-kit.js?v=11"></script>
 
-  <script src="js/api.js?v=20"></script>
-  <script src="js/auth.js?v=5"></script>
-  <script src="js/settings-form.js?v=2"></script>
+  <script src="js/api.js?v=18"></script>
+  <script src="js/auth.js?v=4"></script>
+  <script src="js/settings-form.js?v=1"></script>
+
+  <!-- Модалка «Добавить ДТП» (создание объекта слоя ДТП по клику на карте) —
+       см. js/dtp-create-form.js шапку. Грузится до backends/accident-analysis.js,
+       чей createDtpCommand.onComplete вызывает DtpCreateForm.open(...). -->
+  <script src="js/dtp-create-form.js?v=1"></script>
 
   <!-- Бэкенд-плагин (window.BackendPlugin) — вся специфика конкретной 1С-базы
-       (baseUrl, иконки слоёв, дашборд/отчёты, команды карты), см. шапку
-       js/backends/_demo.js. Подключён ровно один плагин; новый проект —
-       копия _demo.js под своим id (см. CLAUDE.md, «Старт нового проекта»). -->
+       (baseUrl, слоевые иконки, дашборд/отчёты), см. js/backends/accident-analysis.js
+       шапку. Ровно один из тегов ниже раскомментирован — переключение бэкенда
+       делается вручную при разворачивании, без рантайм-детекта (см. CLAUDE.md). -->
 
-  <!-- Демо без бэкенда: _demo-server.js — «сервер» в браузере (BackendPlugin.mockApi),
-       подключается только вместе с _demo.js и раньше него. В новом проекте
-       этот тег удаляется. -->
-  <script src="js/backends/_demo-server.js?v=2"></script>
-  <script src="js/backends/_demo.js?v=3"></script>
+  <!--<script src="js/backends/_demo.js?v=1"></script>-->
+  <script src="js/backends/clean-roads.js?v=7"></script>
 
-  <script src="js/map.js?v=69"></script>
-  <script src="js/dashboard.js?v=16"></script>
-  <script src="js/rich-report.js?v=3"></script>
+  <script src="js/map.js?v=67"></script>
+  <script src="js/dashboard.js?v=15"></script>
+  <script src="js/rich-report.js?v=2"></script>
 
   <!-- Выгрузка отчётов в XLSX/PDF (BackendPlugin.exportProfile/reportExporters
        читаются лениво внутри вызова, см. js/export.js шапку — не зависит от
        того, до или после backends/<id>.js подключён этот тег). Перед
        reports.js: ReportsApp.renderHeader вызывает ReportExport.headerButtonsHtml()
        при первой же отрисовке шапки предпросмотра. -->
-  <script src="js/export.js?v=3"></script>
-  <script src="js/reports.js?v=12"></script>
+  <script src="js/export.js?v=2"></script>
+  <script src="js/reports.js?v=11"></script>
 
-  <script src="js/app-shell.js?v=5"></script>
+  <script src="js/app-shell.js?v=4"></script>
 </body>
 </html>

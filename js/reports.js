@@ -1,6 +1,8 @@
 /* =====================================================================
-   Экран "Отчёты" (GET /reports, /report/{id}, /report/{id}/settings).
-   Список отчётов, их колонки и данные приходят с сервера — клиент не хардкодит ни состав
+   Экран "Отчёты" — «Список ДТП» и «Места концентрации сводный» (map-api,
+   ААКартографияВнешнееAPI: ПолучитьОтчеты/ПолучитьДанныеОтчета/
+   ПолучитьНастройкиОтчета/СохранитьНастройкиОтчета). Список отчётов, их
+   колонки и данные приходят с сервера — клиент не хардкодит ни состав
    отчётов, ни их поля, только рисует то, что получил (та же идея, что и
    getLayers() у слоёв: сервер — источник истины).
 
@@ -26,7 +28,7 @@ const ReportsApp = (function () {
   // Последний успешно загруженный отчёт — то, что ReportExport.run() (см.
   // js/export.js) выгружает в XLSX/PDF: "выгружается то, что уже на
   // экране", без повторного запроса /report/{id}. lastBodyHtml — тело без
-  // шапки предпросмотра и без .chart-tip (печатная ветка экспорта печатает
+  // шапки предпросмотра и без .aa-tip (печатная ветка экспорта печатает
   // ровно его, не перерисовывая отчёт заново).
   let lastData = null;
   let lastBodyHtml = '';
@@ -251,7 +253,7 @@ const ReportsApp = (function () {
       if (token !== loadToken) return; // пользователь успел выбрать другой отчёт
       lastData = data;
       lastBodyHtml = renderBody(data);
-      preview.innerHTML = renderHeader(data) + lastBodyHtml + `<div class="chart-tip" id="reportsTip"></div>`;
+      preview.innerHTML = renderHeader(data) + lastBodyHtml + `<div class="aa-tip" id="reportsTip"></div>`;
     } catch (e) {
       console.error('[ReportsApp] не удалось загрузить отчёт', id, e);
       if (token === loadToken) {
@@ -281,15 +283,17 @@ const ReportsApp = (function () {
   // (renderTable/RichReport — общие для любого бэкенда, kind="table" ещё и
   // дефолт, если сервер вовсе не прислал kind, см. dispatch ниже), сверх них
   // берётся BackendPlugin.reportRenderers (см. контракт плагина) — для
-  // kind'ов, специфичных конкретному бэкенду, которых ядро не знает. Обычно
-  // пуст — большинству баз хватает table/rich.
+  // kind'ов, специфичных конкретному бэкенду, которых ядро не знает. У
+  // accident-analysis (единственный бэкенд на сегодня) reportRenderers пуст —
+  // ей хватает table/rich.
   const REPORT_RENDERERS = Object.assign({
     table: data => renderTable(data.columns, data.rows),
     rich: data => RichReport.render(data)
   }, BackendPlugin.reportRenderers || {});
 
-  // kind="rich" (см. js/rich-report.js) — карточный отчёт с таблицами/графиками
-  // вперемешку; kind="table" (или kind не прислан вовсе) —
+  // kind="rich" (см. map-api, ААКартографияВнешнееAPI, #Область
+  // ОтчетАварийностьКарточный) — карточный отчёт с таблицами/графиками вперемешку;
+  // kind="table" (или отсутствует, оба встроенных в ядро отчёта его не отдают) —
   // плоская { columns, rows } таблица. Шапка общая для всех kind'ов: "N стр."
   // показываем только у построчных отчётов (table и его дефолт при отсутствии
   // kind) — третий (плагинный) kind по умолчанию НЕ обязан быть построчным,

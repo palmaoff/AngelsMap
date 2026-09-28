@@ -5,7 +5,8 @@
    оформление конкретного дашборда, нормализация ответа сервера и демо-данные
    для мгновенной первой отрисовки — всё это НЕ здесь, а в window.BackendPlugin
    (js/backends/<id>.js, поле dashboardTemplates/dashboardDemo, см. его
-   контракт). Этот файл (ядро) знает только формат реестра шаблонов
+   контракт) — переехало туда 2026-08-24, см. историю в CLAUDE.md, "Ядро и
+   плагины под бэкенд". Этот файл (ядро) знает только формат реестра шаблонов
    ({normalize(payload)->D, render(D, meta)->html}) и общую обвязку: спиннер
    загрузки, скелетон на время запроса и карточку ошибки (см. skeletonHtml/
    errorHtml), модалка фильтров (общая с панелью слоёв, см. js/settings-form.js),
@@ -29,8 +30,8 @@ const DashboardApp = (function () {
 
   // Ответ сервера отдаёт категориальные блоки как массив { name, value }, факторы —
   // { label, value }; приводим к парам [подпись, значение] — структурная деталь 1С-
-  // сериализации (ОбъектВJson надёжен на Массив Из Структура, вложенные массивы
-  // примитивов — нет), общая для любого бэкенда. Экспонированы в возвращаемом
+  // сериализации, общая для любого бэкенда с той же конвенцией, не специфика одной
+  // базы (см. CLAUDE.md, план рефакторинга, задача 1). Экспонированы в возвращаемом
   // объекте ниже — ими пользуется normalize() бэкенд-плагинов (BackendPlugin.
   // dashboardTemplates[id].normalize), которые физически не могут дотянуться до
   // приватных функций этого замыкания иначе (плагин — отдельный файл/scope).
@@ -53,15 +54,17 @@ const DashboardApp = (function () {
   function paint(id, D) {
     const tpl = TEMPLATES[id];
     if (!tpl) {
-      // Подставить какой-нибудь другой шаблон нельзя — это был бы рендер
+      // Раньше (один плагин в системе) сюда неявно подставлялся единственный
+      // существующий шаблон — с несколькими плагинами это означало бы рендер
       // ЧУЖОГО шаблона чужими данными (несовместимая схема D). Явная заглушка
-      // — единственный безопасный fallback без полноценного generic-дашборда.
+      // вместо этого — единственный безопасный fallback без полноценного
+      // generic-дашборда (см. CLAUDE.md, решение В10 — не в скоупе).
       document.getElementById('viewDashboard').innerHTML =
         `<div class="reports__preview-empty">Нет шаблона дашборда для проекта «${esc(id)}»</div>`;
       return;
     }
     const root = document.getElementById('viewDashboard');
-    root.innerHTML = tpl.render(D, D.meta) + '<div class="chart-tip" id="dashTip"></div>';
+    root.innerHTML = tpl.render(D, D.meta) + '<div class="aa-tip" id="aaTip"></div>';
 
     lastId = id; lastD = D;
     if (D.meta && D.meta.period) lastPeriod = D.meta.period;
@@ -81,41 +84,46 @@ const DashboardApp = (function () {
      подогнать несуществующие графики. */
 
   // Показывается вместо экрана на время запроса — но только у плагинов БЕЗ
-  // dashboardDemo. У плагина с демо-данными они рисуются мгновенно в init() и
-  // остаются на экране до прихода ответа: скелетон был бы шагом назад (экран
-  // уже не пустой), а при ⟳ — морганием готовых цифр.
+  // dashboardDemo. У accident-analysis/traffic-monitor демо-данные есть, они
+  // рисуются мгновенно в init() и остаются на экране до прихода ответа: для
+  // них скелетон был бы шагом назад (экран уже не пустой), а при ⟳ —
+  // морганием готовых цифр. Так что поведение тех двух дашбордов этой правкой
+  // не меняется вовсе.
   function skeletonHtml() {
-    const kpi = () => `<div class="dash-skel__kpi"><span class="dash-skel__ico"></span>`
-      + `<span class="dash-skel__lines"><i class="dash-skel__l1"></i><i class="dash-skel__l2"></i></span></div>`;
-    return `<div class="dash-skel">
-      <div class="dash-skel__row">${kpi()}${kpi()}${kpi()}</div>
-      <div class="dash-skel__bars"><i></i><i></i><i></i></div>
-      <div class="dash-skel__note"><span class="dash-skel__spin"></span>Считаем показатели${lastPeriod ? ' за ' + esc(lastPeriod) : ''}…</div>
+    const kpi = () => `<div class="cd-skel__kpi"><span class="cd-skel__ico"></span>`
+      + `<span class="cd-skel__lines"><i class="cd-skel__l1"></i><i class="cd-skel__l2"></i></span></div>`;
+    return `<div class="cd-skel">
+      <div class="cd-skel__row">${kpi()}${kpi()}${kpi()}</div>
+      <div class="cd-skel__bars"><i></i><i></i><i></i></div>
+      <div class="cd-skel__note"><span class="cd-skel__spin"></span>Считаем показатели${lastPeriod ? ' за ' + esc(lastPeriod) : ''}…</div>
     </div>`;
   }
 
-  // Заменяет содержимое экрана ЦЕЛИКОМ, включая демо-данные плагина, если они
-  // там были: молча показывать выдуманные цифры вместо реальных хуже, чем
-  // честно сказать, что данные не получены.
+  // Заменяет содержимое экрана ЦЕЛИКОМ. Раньше (до 2026-09-22) catch в load()
+  // только писал console.warn и оставлял на экране демо-данные плагина —
+  // молча показывать выдуманные цифры вместо реальных хуже, чем честно
+  // сказать, что данные не получены. Побочный эффект — у accident-analysis
+  // упавший первый запрос /dashboard теперь тоже даёт эту карточку, а не его
+  // демо-набор; это осознанно (см. инструкцию, «Ошибка загрузки»).
   function errorHtml(e) {
-    return `<div class="dash-err">
-      <span class="dash-err__ico"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 8v5"></path><path d="M12 16.5h.01"></path><circle cx="12" cy="12" r="9"></circle></svg></span>
-      <div class="dash-err__body">
+    return `<div class="cd-err">
+      <span class="cd-err__ico"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 8v5"></path><path d="M12 16.5h.01"></path><circle cx="12" cy="12" r="9"></circle></svg></span>
+      <div class="cd-err__body">
         <h3>Не удалось получить данные дашборда</h3>
         <p>Запрос сводки не выполнен. Проверьте, доступна ли публикация 1С, и повторите.</p>
-        <div class="dash-err__acts">
-          <button type="button" class="dash-btn dash-btn--primary" data-dash-act="refresh">Повторить</button>
-          <button type="button" class="dash-btn" data-dash-act="error-details">Показать подробности</button>
+        <div class="cd-err__acts">
+          <button type="button" class="cd-btn cd-btn--primary" data-dash-act="refresh">Повторить</button>
+          <button type="button" class="cd-btn" data-dash-act="error-details">Показать подробности</button>
         </div>
-        <pre class="dash-err__detail" hidden>${esc(e && (e.stack || e.message) || String(e))}</pre>
+        <pre class="cd-err__detail" hidden>${esc(e && (e.stack || e.message) || String(e))}</pre>
       </div>
     </div>`;
   }
 
   /* Необязательный третий метод шаблона (в дополнение к normalize/render):
      fit(root, D) — доводка того, что нельзя посчитать на этапе сборки строки,
-     пока разметки нет в DOM. Типичный случай — широкий график «Динамика по
-     месяцам» (см. _demo.js): его SVG вписывается в ячейку правилом svg{width:100%;height:100%}
+     пока разметки нет в DOM. Нужен ровно одному графику — «Динамике ДТП по
+     месяцам»: её SVG вписывается в ячейку правилом svg{width:100%;height:100%}
      при preserveAspectRatio="meet", то есть при несовпадении пропорций ячейки и
      viewBox остаются пустые поля, а пропорция ячейки сильно зависит от
      разрешения (измерено: 4.29 на 1440×900 против 6.32 на 1912×897) — подобрать
@@ -137,11 +145,11 @@ const DashboardApp = (function () {
   }
 
   // Слушатели вешаются один раз на стабильный #viewDashboard (paint меняет только его
-  // innerHTML, включая #dashTip — поэтому tip ищем внутри обработчика каждый раз).
+  // innerHTML, включая #aaTip — поэтому tip ищем внутри обработчика каждый раз).
   function bindTooltip() {
     const view = document.getElementById('viewDashboard');
     view.addEventListener('mousemove', e => {
-      const tip = document.getElementById('dashTip');
+      const tip = document.getElementById('aaTip');
       if (!tip) return;
       const t = e.target.closest && e.target.closest('[data-tip]');
       if (t) { tip.innerHTML = t.getAttribute('data-tip'); tip.style.opacity = '1';
@@ -149,7 +157,7 @@ const DashboardApp = (function () {
       else tip.style.opacity = '0';
     });
     view.addEventListener('mouseleave', () => {
-      const tip = document.getElementById('dashTip');
+      const tip = document.getElementById('aaTip');
       if (tip) tip.style.opacity = '0';
     });
   }
@@ -164,7 +172,7 @@ const DashboardApp = (function () {
   function setUpdating(loading) {
     const view = document.getElementById('viewDashboard');
     if (!view) return;
-    const upd = view.querySelector('.dash-flt-upd');
+    const upd = view.querySelector('.aa-flt-upd');
     if (upd) upd.classList.toggle('is-loading', loading);
     const btn = view.querySelector('[data-dash-act="refresh"]');
     if (btn) btn.classList.toggle('is-busy', loading);
@@ -188,7 +196,7 @@ const DashboardApp = (function () {
     } catch (e) {
       // Сеть легла / бэк ответил не-2xx (getJSON бросает) — карточка ошибки
       // ВМЕСТО содержимого экрана, включая демо-данные плагина, если они там
-      // были (см. errorHtml).
+      // были (изменение поведения 2026-09-22, см. errorHtml).
       console.warn('Дашборд: не удалось загрузить данные.', e);
       lastId = null; lastD = null;
       if (view) view.innerHTML = errorHtml(e);
@@ -199,7 +207,13 @@ const DashboardApp = (function () {
 
   // ------------------------------------------------------- фильтры (модалка)
   // Общая модалка с панелью слоёв/вкладкой «Отчёты» (SettingsForm.openSettings,
-  // см. js/settings-form.js и CLAUDE.md, "Settings form module").
+  // см. js/settings-form.js) — до 2026-08-24 у дашборда была своя независимая
+  // копия той же модалки/form-walker'а (#dashSettingsOverlay,
+  // ensureModal/openSettings/collectValues/enhanceMultiSelects/applyDependencies),
+  // заведённая до появления settings-form.js (тогда общий form-walker жил
+  // внутри замыкания map.js и не был наружу доступен) — та причина с тех пор
+  // снята (SettingsForm — window-эспонированный общий модуль), см. CLAUDE.md,
+  // "Settings form module".
   function openDashboardSettings() {
     SettingsForm.openSettings({
       title: 'Фильтры дашборда',
@@ -220,7 +234,7 @@ const DashboardApp = (function () {
       if (act === 'refresh') { load(); return; }
       // Раскрыть текст исключения в карточке ошибки (см. errorHtml).
       if (act === 'error-details') {
-        const pre = btn.closest('.dash-err').querySelector('.dash-err__detail');
+        const pre = btn.closest('.cd-err').querySelector('.cd-err__detail');
         pre.hidden = !pre.hidden;
         btn.textContent = pre.hidden ? 'Показать подробности' : 'Скрыть подробности';
         return;
@@ -228,9 +242,9 @@ const DashboardApp = (function () {
       // Точка расширения для плагина: BackendPlugin.dashboardActions —
       // { <act>: (ctx) => ... }, ctx = { el, reload }. Нужна потому, что
       // делегированный обработчик живёт здесь, в ядре, а разметка (и смысл
-      // кликабельных строк) — целиком в шаблоне плагина: например, переход на
-      // карту по плитке района (_demo.js), разворот урезанных списков, кнопки
-      // состояния «нет данных». Ядру про них знать
+      // кликабельных строк) — целиком в шаблоне плагина: у «Чистых дорог» это
+      // переход на карту по строке подрядчика/адм. единицы, разворот урезанных
+      // мобильных списков и кнопки состояния «нет данных». Ядру про них знать
       // нечего, а заводить второй слушатель на том же контейнере из плагина —
       // дублировать эту делегацию. Плагины без поля не затрагиваются.
       const actions = BackendPlugin.dashboardActions || {};

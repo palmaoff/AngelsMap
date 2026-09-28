@@ -1,16 +1,30 @@
 /* =====================================================================
    API-слой карты.
 
-   Весь обмен с 1С сосредоточен здесь: HTTP-сервис публикации 1С, адрес —
-   BackendPlugin.baseUrl. Контракт (пути, форма аргументов и ответа) —
-   единый для любой базы, которая его реализует; живой образец ответов —
-   js/backends/_demo-server.js, описание — CLAUDE.md, «Data source».
+   Весь обмен с 1С сосредоточен здесь. Ходит в реальные HTTP-сервисы 1С
+   (см. src/HTTPServices/API.xml + src/CommonModules/АнгелКартографияВнешнееAPI
+   в конфигурации «Ангел»). Контракт (форма аргументов и ответа) — то, на чём
+   завязан map.js — соответствует тому, что реально отдают эти сервисы.
+
+   Соответствие с реализацией в конфигурации «Ангел»:
+     getLayers()        ~ АнгелКартографияВнешнееAPI.ПолучитьСлои
+     getLayerData()      ~ АнгелКартографияВнешнееAPI.ПолучитьДанныеСлоя
+     getHeatmap()        ~ АнгелКартографияВнешнееAPI.ПолучитьТепловуюКарту (Безбилетники.ДанныеДляСлоя)
+     getObjectDetails()  ~ АнгелКартографияВнешнееAPI.ПолучитьДетали
+     getLayerSettings()  ~ АнгелКартографияВнешнееAPI.ПолучитьНастройкиСлоя (ещё не реализовано в 1С)
+     saveLayerSettings() ~ АнгелКартографияВнешнееAPI.СохранитьНастройкиСлоя (ещё не реализовано в 1С)
+     sendAction()        ~ АнгелКартографияВнешнееAPI.ВыполнитьДействие
+     getReports()        ~ ААКартографияВнешнееAPI.ПолучитьОтчеты (АА-проект, map-api/)
+     getReport()         ~ ААКартографияВнешнееAPI.ПолучитьДанныеОтчета
+     getReportSettings() ~ ААКартографияВнешнееAPI.ПолучитьНастройкиОтчета
+     saveReportSettings()~ ААКартографияВнешнееAPI.СохранитьНастройкиОтчета
 
    apiUrl/getJSON/postJSON экспортированы наружу (см. низ файла) сверх именованных
-   методов ниже — не для общего пользования, а специально для BackendPlugin.mapCommands
-   (см. CLAUDE.md, «Команды карты»): у команды карты может быть собственный эндпоинт,
-   специфичный ровно одному бэкенду, которому не место в общей таблице методов этого
-   файла — так плагин ходит по HTTP сам, без дублирования auth/401-логики.
+   методов выше — не для общего пользования, а специально для BackendPlugin.mapCommands
+   (см. CLAUDE.md, "Backend plugins"/"Маршрут с очагами аварийности"): у команды карты
+   может быть собственный эндпоинт, специфичный ровно одному бэкенду, которому не место
+   в общей таблице методов этого файла — так плагин ходит по HTTP сам, без дублирования
+   auth/401-логики.
    ===================================================================== */
 
 const MapAPI = (function () {
@@ -22,9 +36,11 @@ const MapAPI = (function () {
 
   // ------------------------------------------------------------- auth
   // Публикация 1С аутентифицирует запросы стандартным HTTP Basic-auth по
-  // реальным пользователям информационной базы — благодаря этому сервер сам
-  // резолвит ТекущийПользователь(), и все сохранённые фильтры слоёв/отчётов/
-  // дашборда читаются/пишутся уже для конкретного залогинившегося пользователя. Заголовок хранится в localStorage —
+  // реальным пользователям информационной базы (а не единым техническим
+  // APIUser, как раньше) — благодаря этому сервер сам резолвит
+  // ТекущийПользователь(), и все фильтры слоёв (ХранилищеОбщихНастроек, см.
+  // АнгелКартографияВнешнееAPI) читаются/пишутся уже для конкретного
+  // залогинившегося пользователя. Заголовок хранится в localStorage —
   // сессия переживает перезагрузку страницы до явного logout() (см. js/auth.js).
   const AUTH_KEY = 'mapAuth';
 
@@ -45,16 +61,7 @@ const MapAPI = (function () {
     return 'Basic ' + btoa(binary);
   }
 
-  // BackendPlugin.requiresAuth === false — публикация анонимная (или бэкенда нет
-  // вовсе, см. mockApi ниже): заголовок не шлём, даже если в localStorage осталась
-  // сессия от другого бэкенда на том же origin — иначе чужой Basic-auth мог бы
-  // получить 401 и зациклить перезагрузку (см. dropAuth и js/auth.js).
-  function authRequired() {
-    return !(window.BackendPlugin && BackendPlugin.requiresAuth === false);
-  }
-
   function authHeaders() {
-    if (!authRequired()) return {};
     const auth = readAuth();
     return auth ? { Authorization: auth.header } : {};
   }
@@ -76,9 +83,10 @@ const MapAPI = (function () {
     return BackendPlugin.baseUrl.replace(/\/+$/, '') + '/' + String(path).replace(/^\/+/, '');
   }
 
-  // Сервер отдаёт данные слоя в естественной форме, не сводя её к одной: у части
-  // слоёв это готовый массив объектов, у части точечных — объект { key, date: [...] },
-  // где сами объекты лежат в .date (так их отдаёт штатное ЗаполнитьСведенияДляКарты). Клиент сам определяет, что пришло, и достаёт из этого
+  // Сервер отдаёт данные слоя в естественной форме, не сводя её к одной (см. map-api,
+  // ААКартографияВнешнееAPI.ПодготовитьДанныеСлоя): у части слоёв это готовый массив
+  // объектов, у точечных (ДТП/Дислокации/знаки/…) — объект { key, date: [...] }, где
+  // сами объекты лежат в .date. Клиент сам определяет, что пришло, и достаёт из этого
   // плоский массив объектов слоя — то, что дальше ждут map.js (buildVectorGroup,
   // data.length). Массив проходит как есть; всё остальное — пусто.
   function extractFeatures(payload) {
@@ -93,93 +101,12 @@ const MapAPI = (function () {
     return err;
   }
 
-  // ------------------------------------------------------------- mock
-  // Бэкенд внутри браузера: если подключённый плагин задаёт BackendPlugin.mockApi,
-  // запросы не уходят в сеть, а разрешаются его обработчиками (сейчас так работает
-  // только js/backends/_demo.js). Перехват — на уровне getJSON/postJSON,
-  // а не именованных методов ниже: так через заглушку идут и собственные эндпоинты
-  // плагина, которые команды карты вызывают через ctx.getJSON/postJSON, а всё ядро
-  // (extractFeatures, спиннеры, кэш, токены устаревших ответов) работает ровно тем
-  // же кодом, что и с настоящей 1С.
-  //
-  // mockApi — { 'МЕТОД путь/:параметр': handler }, путь относительно baseUrl.
-  // handler({ method, path, params, query, body }) → значение или Promise; чтобы
-  // ответить ошибкой, handler бросает Error с полем status. Неизвестный маршрут —
-  // 404, как у настоящего сервиса без такого эндпоинта.
-  //
-  // Задержка ответа — BackendPlugin.mockDelay ([мин, макс] мс, по умолчанию
-  // [150, 400]) или ?mockdelay=N в URL; без неё не видно ни спиннеров, ни гонок.
-  // ?mockfail=dashboard,reports — ответить 500 на все пути, чей первый сегмент в
-  // списке (проверка карточек ошибок без правки кода).
-  const pageParams = new URLSearchParams(location.search);
-  const mockFail = (pageParams.get('mockfail') || '').split(',').map(s => s.trim()).filter(Boolean);
-
-  function mockRoutes() {
-    return window.BackendPlugin && BackendPlugin.mockApi;
-  }
-
-  function mockDelayMs() {
-    const forced = pageParams.get('mockdelay');
-    if (forced !== null && forced !== '' && !isNaN(forced)) return Number(forced);
-    const range = (window.BackendPlugin && BackendPlugin.mockDelay) || [150, 400];
-    return range[0] + Math.random() * (range[1] - range[0]);
-  }
-
-  function mockError(url, status, text) {
-    const err = new Error(`MapAPI (mock): HTTP ${status} ${text} (${url})`);
-    err.status = status;
-    return err;
-  }
-
-  function matchRoute(pattern, segments) {
-    const parts = pattern.split('/').filter(Boolean);
-    if (parts.length !== segments.length) return null;
-    const params = {};
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i].startsWith(':')) params[parts[i].slice(1)] = segments[i];
-      else if (parts[i] !== segments[i]) return null;
-    }
-    return params;
-  }
-
-  async function mockRequest(method, url, body) {
-    const base = BackendPlugin.baseUrl.replace(/\/+$/, '') + '/';
-    const rel = url.startsWith(base) ? url.slice(base.length) : url;
-    const [pathPart, queryPart] = rel.split('?');
-    const segments = pathPart.split('/').filter(Boolean).map(decodeURIComponent);
-    const query = Object.fromEntries(new URLSearchParams(queryPart || ''));
-
-    await new Promise(resolve => setTimeout(resolve, mockDelayMs()));
-
-    if (mockFail.includes(segments[0])) throw mockError(url, 500, 'Internal Server Error (?mockfail)');
-
-    const routes = mockRoutes();
-    for (const key of Object.keys(routes)) {
-      const space = key.indexOf(' ');
-      if (key.slice(0, space) !== method) continue;
-      const params = matchRoute(key.slice(space + 1), segments);
-      if (!params) continue;
-      let result;
-      try {
-        result = await routes[key]({ method, path: segments.join('/'), params, query, body });
-      } catch (e) {
-        if (e && e.status) throw mockError(url, e.status, e.message || '');
-        throw e;
-      }
-      // Через JSON, а не structuredClone — как по сети: undefined-поля пропадают,
-      // даты становятся строками, и ядро не может случайно мутировать «базу» мока.
-      return result === undefined ? null : JSON.parse(JSON.stringify(result));
-    }
-    throw mockError(url, 404, 'Not Found');
-  }
-
   // credentials: 'omit' на каждом запросе — иначе браузер (замечено в Chrome)
   // сам показывает нативное окно "Войдите в систему" поверх нашей формы
   // логина при любом 401 + WWW-Authenticate: Basic, даже когда Authorization
   // уже выставлен вручную в заголовках. С 'omit' браузер не пытается сам
   // разруливать аутентификацию — 401 просто долетает до кода как обычный ответ.
   async function getJSON(url) {
-    if (mockRoutes()) return mockRequest('GET', url);
     const r = await fetch(url, { headers: authHeaders(), credentials: 'omit' });
     if (r.status === 401) dropAuth();
     if (!r.ok) throw httpError(url, r);
@@ -187,7 +114,6 @@ const MapAPI = (function () {
   }
 
   async function postJSON(url, body) {
-    if (mockRoutes()) return mockRequest('POST', url, body);
     const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -197,6 +123,30 @@ const MapAPI = (function () {
     if (r.status === 401) dropAuth();
     if (!r.ok) throw httpError(url, r);
     return r.json();
+  }
+
+  // Сырое бинарное тело (File/Blob), не JSON — для эндпоинтов вроде
+  // /import/dtp-insurance, где сервер и разбирает, и валидирует файл целиком
+  // сам (см. uploadInsuranceRegistry ниже). Отличается от postJSON тем, что
+  // ответ читается как JSON НЕЗАВИСИМО от r.ok: сервер может вернуть
+  // { ok:false, error } как структурную ошибку с кодом 200, так и с не-2xx
+  // статусом — вызывающему коду нужно тело в обоих случаях, а не только при
+  // успехе. Бросает исключение только когда тело вообще не JSON (настоящая
+  // сетевая/HTTP ошибка без осмысленного ответа сервиса).
+  async function postBinary(url, file, extraHeaders) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { ...(extraHeaders || {}), ...authHeaders() },
+      credentials: 'omit',
+      body: file
+    });
+    if (r.status === 401) dropAuth();
+    try {
+      return await r.json();
+    } catch (e) {
+      if (!r.ok) throw httpError(url, r);
+      throw e;
+    }
   }
 
   // ======================================================================
@@ -213,14 +163,6 @@ const MapAPI = (function () {
      */
     async login(login, password) {
       const header = basicAuthHeader(login, password);
-      // Мок без сети: вход с любыми учётными данными, если /layers отвечает.
-      // Нужен только плагину с mockApi и requiresAuth !== false — показать форму
-      // входа без бэкенда.
-      if (mockRoutes()) {
-        try { await mockRequest('GET', apiUrl('layers')); } catch (e) { return { ok: false, status: e.status }; }
-        localStorage.setItem(AUTH_KEY, JSON.stringify({ login, header }));
-        return { ok: true };
-      }
       let r;
       try {
         r = await fetch(apiUrl('layers'), { headers: { Authorization: header }, credentials: 'omit' });
@@ -243,11 +185,6 @@ const MapAPI = (function () {
       return !!readAuth();
     },
 
-    /** false — вход не нужен (BackendPlugin.requiresAuth === false), см. js/auth.js. */
-    isAuthRequired() {
-      return authRequired();
-    },
-
     getAuthLogin() {
       const auth = readAuth();
       return auth ? auth.login : '';
@@ -260,8 +197,9 @@ const MapAPI = (function () {
 
     /**
      * Настройки инициализации карты. GET /config
-     * Форма ответа: { center: [широта, долгота], zoom } — источник координат на
-     * стороне 1С тот же, что использует нативная карта при сборке своей страницы.
+     * Форма ответа: { center: [широта, долгота], zoom }. См. map-api,
+     * ААКартографияВнешнееAPI.ПолучитьНастройкиКарты — источник координат тот же,
+     * что использует нативная карта 1С при сборке своей страницы.
      */
     async getMapConfig() {
       return getJSON(apiUrl('config'));
@@ -280,8 +218,8 @@ const MapAPI = (function () {
     /**
      * Данные слоя. GET /layer/{id}?bbox=...
      * Ответ сервера приходит в естественной форме слоя — либо массивом объектов, либо
-     * объектом { key, date: [...] } у точечных слоёв (сервер её не сводит, см.
-     * extractFeatures выше). extractFeatures определяет форму и
+     * объектом { key, date: [...] } у точечных слоёв (сервер её не сводит, см. map-api,
+     * ААКартографияВнешнееAPI.ПодготовитьДанныеСлоя). extractFeatures определяет форму и
      * возвращает наружу всегда плоский массив объектов слоя, поэтому вызывающий код
      * (map.js) работает с одним контрактом независимо от слоя.
      * Сами объекты — нативный формат карты 1С (см. Каталог.*.ЗаполнитьСведенияДляКарты):
@@ -296,7 +234,7 @@ const MapAPI = (function () {
       return extractFeatures(await getJSON(url));
     },
 
-    /** Тепловой слой (layer.type === 'heat'). GET /heatmap → [{ lat, lng, count, maxCount }] */
+    /** Тепловой слой пассажиропотока. GET /heatmap */
     async getHeatmap(params = {}) {
       const qs = new URLSearchParams(params).toString();
       const url = apiUrl('heatmap') + (qs ? `?${qs}` : '');
@@ -305,9 +243,9 @@ const MapAPI = (function () {
 
     /**
      * Сводка для экрана «Дашборд». GET /dashboard
-     * Форма ответа: { id, title, generatedAt, ..., data:{...} } — всё, кроме id,
-     * определяет конкретный бэкенд и разбирает normalize() шаблона его плагина
-     * (образец — js/backends/_demo-server.js, GET dashboard). Фильтры (период и т.п.)
+     * Форма ответа: { id, title, region, period:{begin,end}, appg, onlyRegistered,
+     * generatedAt, data:{ kpi, dyn, vidy, narush, mesto, osvet, doroga, factors } } —
+     * см. map-api, ААКартографияВнешнееAPI.ПолучитьДашборд. Фильтры (период/учётные)
      * берутся из сохранённых настроек дашборда пользователя на сервере (см.
      * getDashboardSettings/saveDashboardSettings), а не из query-параметров. id —
      * идентификатор шаблона: клиент (js/dashboard.js) по нему выбирает разметку из
@@ -332,6 +270,19 @@ const MapAPI = (function () {
      */
     async saveDashboardSettings(values) {
       return postJSON(apiUrl('dashboard/settings'), { values });
+    },
+
+    /**
+     * Перевести карту в срез дашборда. POST /dashboard/focus
+     * body: { contractorId } либо { adminUnitId }
+     * Сервер делает MERGE переданного ключа в уже сохранённый фильтр слоя
+     * «ТранспортныеСредства», в отличие от saveLayerSettings(), который пишет
+     * форму целиком и обнулил бы непереданные поля (ГРЗ, тип ТС, марка…).
+     * Поэтому переход «клик по строке дашборда → карта с отбором» идёт именно
+     * сюда, а не в saveLayerSettings (см. js/backends/clean-roads.js, focusOnMap()).
+     */
+    async focusDashboard(params) {
+      return postJSON(apiUrl('dashboard/focus'), params);
     },
 
     /** Подробности объекта для правой панели. GET /object/{layerId}/{objectId} */
@@ -369,7 +320,8 @@ const MapAPI = (function () {
 
     /**
      * Список отчётов для вкладки «Отчёты». GET /reports
-     * Форма ответа: Массив Из { id, name, meta, kind? }.
+     * Форма ответа: Массив Из { id, name, meta } — см. map-api,
+     * ААКартографияВнешнееAPI.ПолучитьОтчеты.
      */
     async getReports() {
       return getJSON(apiUrl('reports'));
@@ -408,9 +360,27 @@ const MapAPI = (function () {
       return postJSON(apiUrl(`report/${encodeURIComponent(id)}/settings`), { values });
     },
 
+    /**
+     * Загрузка реестра страхования (xlsx) — тело запроса сырые байты выбранного
+     * пользователем файла (объект File из <input type="file">), без Base64/
+     * FormData-обёртки; весь разбор и запись в базу происходят на сервере.
+     * POST /import/dtp-insurance, заголовки Content-Type: application/octet-stream +
+     * X-Filename (для сообщений об ошибках/логов на сервере, на поведение не влияет).
+     * Ответ — { ok:true, summary:{total,created,duplicates,errors}, rows:[{row,
+     * status,comment,dtpRef}] } либо { ok:false, error } (см. postBinary — тело
+     * читается как JSON независимо от HTTP-статуса, вызывающий код сам проверяет
+     * body.ok, а не полагается на r.ok).
+     */
+    async uploadInsuranceRegistry(file) {
+      return postBinary(apiUrl('import/dtp-insurance'), file, {
+        'Content-Type': 'application/octet-stream',
+        'X-Filename': encodeURIComponent(file.name)
+      });
+    },
+
     // apiUrl/getJSON/postJSON — общие примитивы транспорта, наружу для BackendPlugin'ов,
     // которым нужен собственный эндпоинт вне именованных методов выше (см. CLAUDE.md,
-    // «Команды карты» — mapCommands: плагин сам полностью владеет своим HTTP-вызовом
+    // "Backend plugins" — mapCommands: плагин сам полностью владеет своим HTTP-вызовом
     // (URL, payload), пользуясь той же авторизацией/401-обработкой, что и весь остальной
     // клиент, вместо дублирования fetch с нуля).
     apiUrl,

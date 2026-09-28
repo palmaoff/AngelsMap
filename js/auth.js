@@ -25,17 +25,11 @@ const MapAuth = (function () {
     el.addEventListener('transitionend', () => el.remove(), { once: true });
   }
 
-  // Название приложения — из плагина (BackendPlugin.appTitle), ядро своего бренда
-  // не имеет; тот же текст уходит в document.title (см. init).
-  function appTitle() {
-    return (window.BackendPlugin && BackendPlugin.appTitle) || 'Карта';
-  }
-
   function renderLoginScreen(onSuccess) {
     document.getElementById('app').insertAdjacentHTML('beforeend', `
       <div class="auth-overlay" id="authOverlay">
         <form class="auth-card" id="authForm">
-          <div class="auth-card__title">${appTitle()}</div>
+          <div class="auth-card__title">Ангел · Карта</div>
           <div class="auth-card__subtitle">Вход под учётной записью 1С</div>
           <label class="auth-field">
             <span>Логин</span>
@@ -84,14 +78,6 @@ const MapAuth = (function () {
   }
 
   function renderUserBadge() {
-    // Вход не требуется (BackendPlugin.requiresAuth === false) — выходить не из
-    // чего, в подвале только подпись режима (BackendPlugin.anonymousLabel).
-    if (!MapAPI.isAuthRequired()) {
-      const label = (window.BackendPlugin && BackendPlugin.anonymousLabel) || 'Без входа';
-      document.getElementById('panelLayersFooter').innerHTML = `
-        <div class="auth-badge"><span class="auth-badge__login" title="${label}">${label}</span></div>`;
-      return;
-    }
     const login = MapAPI.getAuthLogin();
     // Живёт внутри panel__footer панели «Слои карты» (см. map.js: buildChrome),
     // а не как отдельный плавающий блок — сворачивается вместе с панелью и не
@@ -122,15 +108,6 @@ const MapAuth = (function () {
   }
 
   function init() {
-    document.title = appTitle();
-
-    // Анонимный бэкенд (requiresAuth === false): ни формы входа, ни перезагрузки
-    // по 401 — перезагрузка там ничего бы не изменила и ушла бы в цикл.
-    if (!MapAPI.isAuthRequired()) {
-      startApp();
-      return;
-    }
-
     // Сессия протухла или пароль сменили прямо во время работы с картой —
     // 401 от любого запроса (см. api.js: dropAuth) сбрасывает localStorage.
     // Проще перезагрузить страницу, чем аккуратно останавливать уже

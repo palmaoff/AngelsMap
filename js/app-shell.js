@@ -25,6 +25,12 @@ const AppShell = (function () {
   ];
   const DEFAULT_VIEW = 'map';
 
+  // Кнопка загрузки реестра страхования (см. js/insurance-import.js) — не
+  // экран, а модалка поверх текущего, поэтому не входит в VIEWS/showView, но
+  // рисуется в той же пилюле .view-switch, рядом с переключателями экранов
+  // (не отдельный плавающий элемент).
+  const SVG_UPLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+
   let currentView = null;
 
   function viewElId(id) {
@@ -69,9 +75,14 @@ const AppShell = (function () {
     document.getElementById('app').insertAdjacentHTML('beforeend', `
       <div class="view-switch" id="viewSwitch">
         ${VIEWS.map(v => `<button class="view-switch__btn" data-view="${v.id}">${v.label}</button>`).join('')}
+        <span class="view-switch__divider"></span>
+        ${(window.BackendPlugin && BackendPlugin.supportsInsuranceImport)
+          ? `<button class="view-switch__action" id="btnInsuranceImport" title="Загрузить реестр страхования">${SVG_UPLOAD}</button>`
+          : ''}
       </div>`);
 
     document.getElementById('viewSwitch').addEventListener('click', e => {
+      if (e.target.closest('#btnInsuranceImport')) { InsuranceImport.open(); return; }
       const btn = e.target.closest('.view-switch__btn');
       if (btn) location.hash = '#' + btn.dataset.view;
     });
@@ -81,6 +92,14 @@ const AppShell = (function () {
     renderSwitch();
     DashboardApp.init();
     ReportsApp.init();
+    if (window.BackendPlugin && BackendPlugin.supportsInsuranceImport) InsuranceImport.init();
+    // DtpCreateForm — в отличие от InsuranceImport, не за отдельным supports-
+    // флагом: его модалка нужна только если подключённый BackendPlugin.mapCommands
+    // содержит команду, которая её открывает (сегодня — createDtpCommand,
+    // accident-analysis), но само по себе мгновенное монтирование пустого DOM-
+    // каркаса безусловно дешевле лишнего флага контракта ради одной проверки —
+    // см. CLAUDE.md, "Создание ДТП по клику".
+    DtpCreateForm.init();
 
     window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
     showView(location.hash.slice(1) || DEFAULT_VIEW);

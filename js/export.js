@@ -5,7 +5,7 @@
    печатном документе (ни строки на стороне 1С). Причина: клиентский JSON
    отчёта (columns/rows либо sections/cards) уже унифицирован между базами,
    а серверные экспортные модули в разных проектах на этой кодовой базе
-   неизбежно разойдутся и придётся
+   (accident analysis / traffic monitor / …) неизбежно разойдутся и придётся
    синхронизировать руками — экспорт поверх уже готового JSON этой проблемы
    не имеет.
 
@@ -433,7 +433,7 @@ const ReportExport = (function () {
       .exp-h__line { font-size: 9pt; color: #4b5563; }
       /* Подсказки графиков и любые кнопки в печать не идут — на экране это
          интерактивные элементы без печатного смысла. */
-      .chart-tip, button, .icon-btn, .report-preview__refresh, .report-preview__actions,
+      .aa-tip, button, .icon-btn, .report-preview__refresh, .report-preview__actions,
       .report-export-btn { display: none !important; }
       .report-table-wrap { border: none; overflow: visible !important; }
       table.report-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }

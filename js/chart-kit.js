@@ -3,22 +3,46 @@
    библиотек, как и весь остальной клиент карты), общие для js/dashboard.js
    и js/rich-report.js.
 
-   Подключается в index.html сразу после config.js — заведомо раньше обоих
-   потребителей. Встроенное: перенос строк подписей (wrapLabel), усечение
-   длинных названий (truncate), wide/narrow варианты (hBarChart/
-   hBarGroupedChart), защита от «пончика на 100% одной категорией»
-   (donutChart).
+   ИСТОРИЯ: до 2026-08-24 оба модуля независимо реализовывали почти одни и
+   те же чарты (columnChart≈groupedBars, hBarChart≈hBars, donutChart≈donut,
+   donutLegend≈dleg/pieLegend). rich-report.js прямо в своей шапке объяснял
+   причину не шарить код с dashboard.js: "порядок подключения скриптов в
+   index.html не должен быть важен" — т.е. на момент написания не было
+   модуля с гарантированным порядком загрузки раньше обоих потребителей.
+   Эта причина снята: chart-kit.js подключается в index.html сразу после
+   config.js, заведомо раньше и dashboard.js, и rich-report.js (тем же
+   способом, каким settings-form.js уже гарантированно грузится раньше
+   map.js/reports.js).
 
-   Три необязательных расширения сигнатур — по умолчанию не активны
-   (rich-report.js не выставляет ни одного, его поведение от них не зависит):
-     - columnChart: элемент серии может нести свой el.series[i].color — для
-       серий с СЕМАНТИЧЕСКИ разными цветами (например, «Происшествия»/
-       «Пострадало»/«Погибло» в дашборде _demo.js); без него — бинарная
-       accent/context-раскраска (акцент только у последней серии).
-     - columnChart: el.aspect — целевое отношение ширина/высота холста, см.
-       саму функцию.
-     - hBarChart/hBarList: el.colors (массив) — свой цвет у каждой категории
-       (как у соседнего пончика), без него — один сплошной ACCENT.
+   За основу взяты версии из rich-report.js, а не более простые из
+   dashboard.js — они более полные: перенос строк подписей (wrapLabel),
+   усечение длинных названий (truncate), wide/narrow варианты (hBarChart/
+   hBarGroupedChart), защита от «пончика на 100% одной категорией»
+   (donutChart). Эти доработки чинили конкретные визуальные баги, см.
+   git-историю rich-report.js и CLAUDE.md ("Long hbar category labels...",
+   "In-SVG font size scaled with however many chart elements...").
+
+   Два расширения сигнатур, которых не было ни в одной из исходных версий,
+   понадобились именно для слияния (не overengineering "на будущее"):
+     - columnChart: элемент серии может нести свой el.series[i].color —
+       иначе dashboard.js's «Динамика ДТП по месяцам» (три СЕМАНТИЧЕСКИ
+       разных цвета — ДТП синий/Погибло красный/Ранено зелёный) схлопнулась
+       бы в бинарную accent/context-раскраску rich-report.js (акцент только
+       последней серии, остальные — один серый) — это не оттенок
+       оформления, а потеря содержательного смысла (какая линия что значит).
+     - hBarChart: el.colors (массив) — иначе dashboard.js's «Виды ДТП»/
+       «Виды нарушений» (каждая категория — свой цвет из палитры CAT,
+       так же, как у пончиков) схлопнулись бы в один сплошной ACCENT-цвет.
+   Оба расширения по умолчанию не активны (rich-report.js ни разу не
+   выставляет ни el.series[i].color, ни el.colors) — её собственное
+   поведение не меняется ни на пиксель.
+
+   Геометрия columnChart (текстовая авто-ширина групп, см. саму функцию)
+   унаследована как есть из rich-report.js — это единственный сознательно
+   принятый визуальный компромисс слияния: раньше у dashboard.js «Динамика»
+   была на своей отдельной, куда более широкой/приземистой сетке
+   (W=1180,H=210 против общей текст-зависимой раскладки здесь). Числа
+   графика и цвета серий не меняются, только пропорции самого SVG-холста.
    ===================================================================== */
 
 const ChartKit = (function () {
@@ -34,16 +58,17 @@ const ChartKit = (function () {
   // в dashboard.js и rich-report.js). ink — цвет крупного числа в центре пончика
   // (dashboard.js использовал T.ink, rich-report.js — тот же #1b2434 буквально).
   const T = { ink: '#1b2434', ink2: '#6a7688', muted: '#97a1b2', grid: '#e9ecf2', axis: '#d3d9e4', surf: '#ffffff' };
-  // Категориальная палитра (несколько категорий одной серии — виды событий, отделы,
+  // Категориальная палитра (несколько категорий одной серии — виды ДТП, отделы,
   // …) — проверена validate_palette.js (CVD-safe, фиксированный порядок слотов).
   const CAT = ['#2a78d6', '#008300', '#e87ba4', '#eda100', '#1baf7a', '#eb6834'];
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  // Компактное число для тесных подписей (115 622 -> 116К) — для шаблонов
-  // плагинов, где полный fmt()-текст (например, у подписей оси рядом с линиями
-  // сетки) был бы избыточно широким. Полное число остаётся в data-tip/fmt()-
-  // выводе легенды/таблиц — сокращается только там, где явно используется.
+  // Компактное число для тесных подписей (115 622 -> 116К) — сейчас использует
+  // только js/backends/traffic-monitor.js (hourAreaLine, подписи оси значений
+  // «Пассажиропоток по часам»), где полный fmt()-текст рядом с 6 линиями сетки
+  // был бы избыточно широким. Полное число остаётся в data-tip/fmt()-выводе
+  // легенды/таблиц — сокращается только там, где явно используется.
   const shortFmt = n => {
     const v = Math.round(n), a = Math.abs(v);
     if (a < 1000) return String(v);
@@ -64,7 +89,9 @@ const ChartKit = (function () {
   // а не массив/счётчик) — при нескольких выбранных значениях эта строка легко
   // становится длиннее самого дашборда. Наличие запятой — единственный сигнал
   // "выбрано больше одного", доступный клиенту (сервер не отдаёт ни массив, ни
-  // count) — единственное значение или пустое/«Все» остаются как есть.
+  // count) — единственное значение или пустое/«Все» остаются как есть. Механизм
+  // общий (любой будущий бэкенд с той же 1С-конвенцией джойна), хотя пока
+  // используется только под accident-analysis.
   const chipLabel = value => {
     const v = (value || 'Все').trim();
     return v.includes(',') ? 'Выбранные' : v;
@@ -77,13 +104,14 @@ const ChartKit = (function () {
     return n <= 1 ? ACCENT : (i === n - 1 ? ACCENT : CONTEXT);
   }
 
-  // Общий блок KPI-плитки (число + подпись + дельта к АППГ) для шаблонов дашборда.
+  // Общий блок KPI-плитки (число + подпись + дельта к АППГ) — переиспользуем
+  // любым будущим дашбордом, не только accident-analysis.
   function kpiCard(lab, cur, prev, color) {
     const d = dstr(cur, prev);
-    return `<div class="dash-kpi">
-      <div style="flex:1;min-width:0"><div class="dash-k-lab"><span class="dash-sw" style="background:${color}"></span>${esc(lab)}</div>
-      <div class="dash-k-num tabnum">${fmt(cur)}</div></div>
-      <div class="dash-k-side">АППГ ${fmt(prev)}<br><span class="dash-delta ${d.good ? 'is-good' : ''}">${d.txt}</span></div></div>`;
+    return `<div class="aa-kpi">
+      <div style="flex:1;min-width:0"><div class="aa-k-lab"><span class="aa-sw" style="background:${color}"></span>${esc(lab)}</div>
+      <div class="aa-k-num aa-tab">${fmt(cur)}</div></div>
+      <div class="aa-k-side">АППГ ${fmt(prev)}<br><span class="aa-delta ${d.good ? 'is-good' : ''}">${d.txt}</span></div></div>`;
   }
 
   // Легенда серий (несколько линий/групп столбцов на одном графике) — цветной
@@ -140,9 +168,9 @@ const ChartKit = (function () {
     // Без него ширина группы определяется только контентом (gxMin) — исходное
     // поведение, на котором стоит rich-report.js: там график лежит в карточке
     // произвольной ширины, целевых пропорций у неё нет. У дашборда наоборот:
-    // ячейка «Динамика по месяцам» — широкая полоса на всю правую колонку
+    // ячейка «Динамика ДТП по месяцам» — широкая полоса на всю правую колонку
     // (~1007×237 на 1440×900), и текстовая ширина групп давала viewBox 440×240,
-    // который .dash-chart svg{width:100%;height:100%} с preserveAspectRatio="meet"
+    // который .aa-chart svg{width:100%;height:100%} с preserveAspectRatio="meet"
     // вписывал ПО ВЫСОТЕ, оставляя график маленьким прямоугольником по центру
     // полупустой панели (плюс max-width:560px ниже добивал остаток). Растягиваем
     // сами группы, а не картинку: масштаб шрифта/столбцов остаётся 1:1.
@@ -156,7 +184,7 @@ const ChartKit = (function () {
     for (let t = 0; t <= 4; t++) {
       const y = m.t + ph - ph * t / 4;
       s += `<line x1="${m.l}" y1="${y}" x2="${W - m.r}" y2="${y}" stroke="${T.grid}"/>`;
-      s += `<text x="${m.l - 6}" y="${y + 3}" text-anchor="end" font-size="10.5" fill="${T.muted}" class="tabnum">${fmt(Math.round(max * t / 4))}</text>`;
+      s += `<text x="${m.l - 6}" y="${y + 3}" text-anchor="end" font-size="10.5" fill="${T.muted}" class="aa-tab">${fmt(Math.round(max * t / 4))}</text>`;
     }
     // Отступ от оси до первой строки подписи не зависит от wrapped — только m.b
     // (и, соответственно, запас снизу под вторую строку) меняется при переносе.
@@ -167,7 +195,7 @@ const ChartKit = (function () {
         const v = se.values[i] || 0, bh = ph * v / max, x = x0 + j * bw, y = m.t + ph - bh, c = se.color || seriesColor(j, series.length);
         s += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(bw - 2, 1).toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="3" fill="${c}" data-tip="${esc(se.name)} · ${esc(flat(cat))}: <b>${fmt(v)}</b>"/>`;
         // Значение всегда видно над столбцом (не только по наведению).
-        s += `<text x="${(x + Math.max(bw - 2, 1) / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" font-size="10" fill="${T.ink2}" class="tabnum">${fmt(v)}</text>`;
+        s += `<text x="${(x + Math.max(bw - 2, 1) / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" font-size="10" fill="${T.ink2}" class="aa-tab">${fmt(v)}</text>`;
       });
       linesByCat[i].forEach((line, li) => {
         s += `<text x="${(m.l + i * gx + gx / 2).toFixed(1)}" y="${labelY0 + li * 11}" text-anchor="middle" font-size="11" fill="${T.ink2}">${esc(line)}</text>`;
@@ -193,7 +221,7 @@ const ChartKit = (function () {
     for (let t = 0; t <= 4; t++) {
       const y = m.t + ph - ph * t / 4;
       s += `<line x1="${m.l}" y1="${y}" x2="${W - m.r}" y2="${y}" stroke="${T.grid}"/>`;
-      s += `<text x="${m.l - 6}" y="${y + 3}" text-anchor="end" font-size="10.5" fill="${T.muted}" class="tabnum">${fmt(Math.round(max * t / 4))}</text>`;
+      s += `<text x="${m.l - 6}" y="${y + 3}" text-anchor="end" font-size="10.5" fill="${T.muted}" class="aa-tab">${fmt(Math.round(max * t / 4))}</text>`;
     }
     cats.forEach((cat, i) => {
       if (n > 8 && i % 2 === 1) return;
@@ -210,7 +238,7 @@ const ChartKit = (function () {
       s += `<path d="${d}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
       pts.forEach((p, i) => {
         s += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="${c}" stroke="${T.surf}" stroke-width="2" data-tip="${esc(se.name)} · ${esc(cats[i])}: <b>${fmt(se.values[i])}</b>"/>`;
-        s += `<text x="${p[0].toFixed(1)}" y="${(isLast ? p[1] - 8 : p[1] + 15).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="${T.ink2}" class="tabnum">${fmt(se.values[i])}</text>`;
+        s += `<text x="${p[0].toFixed(1)}" y="${(isLast ? p[1] - 8 : p[1] + 15).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="${T.ink2}" class="aa-tab">${fmt(se.values[i])}</text>`;
       });
     });
     s += `<line x1="${m.l}" y1="${m.t + ph}" x2="${W - m.r}" y2="${m.t + ph}" stroke="${T.axis}"/>`;
@@ -225,15 +253,16 @@ const ChartKit = (function () {
      Зачем подпись сверху: в hBarChart название категории делит ширину с самим
      баром — в «узком» режиме на него отведено 150px, и truncate() режет его до
      24 символов («Нарушение правил маневрирования» → «Нарушение правил
-     маневрир…»). В двух соседних панелях полос дашборда (.dash-layout)
-     расширять этот бюджет некуда: обе стоят в половине правой колонки. Отдельная строка под название снимает вопрос целиком.
+     маневрир…»). В панелях «Виды ДТП»/«Виды нарушений ПДД» дашборда
+     аварийности расширять этот бюджет некуда: обе панели стоят в половине
+     правой колонки. Отдельная строка под название снимает вопрос целиком.
 
-     Зачем HTML, а не SVG: SVG-график в .dash-chart вписывается правилом
+     Зачем HTML, а не SVG: SVG-график в .aa-chart вписывается правилом
      `svg{width:100%;height:100%}` при preserveAspectRatio="meet", то есть
      МАСШТАБИРУЕТСЯ под ячейку — вместе с текстом, и с полями, когда пропорция
      ячейки не совпадает с viewBox. А пропорция здесь гуляет очень широко:
      измерено 2.6 на 1440×900 против 4.0 на 1912×897 (обе оси ячейки зависят от
-     раскладки .dash-right по-разному). Ни один фиксированный viewBox под это не
+     раскладки .aa-right по-разному). Ни один фиксированный viewBox под это не
      подобрать — при любом выборе на части мониторов подписи оказывались бы
      мельче/крупнее задуманного и с пустыми полями по бокам. Обычные HTML-строки
      этой проблемы не имеют вовсе: полоса тянется по ширине сама, шрифт всегда
@@ -250,7 +279,7 @@ const ChartKit = (function () {
       const c = el.colors ? el.colors[i % el.colors.length] : ACCENT;
       const label = fmt(v) + (total > 0 && n > 1 ? ' · ' + pct + '%' : '');
       return `<div class="ck-hbar">
-        <div class="ck-hbar__top"><span class="ck-hbar__name">${esc(flat(cat))}</span><span class="ck-hbar__val tabnum">${esc(label)}</span></div>
+        <div class="ck-hbar__top"><span class="ck-hbar__name">${esc(flat(cat))}</span><span class="ck-hbar__val aa-tab">${esc(label)}</span></div>
         <div class="ck-hbar__track"><div class="ck-hbar__fill" style="width:${(v / max * 100).toFixed(1)}%;background:${c}" data-tip="${esc(flat(cat))}: <b>${fmt(v)}</b>${total > 0 ? ' (' + pct + '%)' : ''}"></div></div>
       </div>`;
     }).join('')}</div>`;
@@ -282,7 +311,7 @@ const ChartKit = (function () {
       s += `<rect x="${padL}" y="${y}" width="${pw}" height="${rowH}" rx="4" fill="${T.grid}"/>`;
       s += `<rect x="${padL}" y="${y}" width="${Math.max(bw, 1).toFixed(1)}" height="${rowH}" rx="4" fill="${c}" data-tip="${esc(flat(cat))}: <b>${fmt(v)}</b>${total > 0 ? ' (' + pct + '%)' : ''}"/>`;
       const label = fmt(v) + (total > 0 && n > 1 ? ' · ' + pct + '%' : '');
-      s += `<text x="${(padL + Math.max(bw, 1) + 8).toFixed(1)}" y="${(y + rowH / 2 + 4).toFixed(1)}" font-size="10.5" fill="${T.ink2}" class="tabnum">${esc(label)}</text>`;
+      s += `<text x="${(padL + Math.max(bw, 1) + 8).toFixed(1)}" y="${(y + rowH / 2 + 4).toFixed(1)}" font-size="10.5" fill="${T.ink2}" class="aa-tab">${esc(label)}</text>`;
     });
     return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${s}</svg>`;
   }
@@ -310,7 +339,7 @@ const ChartKit = (function () {
     for (let t = 0; t <= 4; t++) {
       const x = padL + pw * t / 4;
       s += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${plotBottom}" stroke="${T.grid}"/>`;
-      s += `<text x="${x.toFixed(1)}" y="${plotBottom + 15}" text-anchor="middle" font-size="10.5" fill="${T.muted}" class="tabnum">${fmt(Math.round(max * t / 4))}</text>`;
+      s += `<text x="${x.toFixed(1)}" y="${plotBottom + 15}" text-anchor="middle" font-size="10.5" fill="${T.muted}" class="aa-tab">${fmt(Math.round(max * t / 4))}</text>`;
     }
     cats.forEach((cat, i) => {
       const bandY = padT + i * (bandH + bandGap);
@@ -322,7 +351,7 @@ const ChartKit = (function () {
         const c = se.color || seriesColor(j, nSeries);
         s += `<rect x="${padL}" y="${y.toFixed(1)}" width="${pw}" height="${barH}" rx="3" fill="${T.grid}"/>`;
         s += `<rect x="${padL}" y="${y.toFixed(1)}" width="${Math.max(bw, 1).toFixed(1)}" height="${barH}" rx="3" fill="${c}" data-tip="${esc(se.name)} · ${esc(flat(cat))}: <b>${fmt(v)}</b>"/>`;
-        s += `<text x="${(padL + Math.max(bw, 1) + 6).toFixed(1)}" y="${(y + barH / 2 + 3.5).toFixed(1)}" font-size="10" fill="${T.ink2}" class="tabnum">${fmt(v)}</text>`;
+        s += `<text x="${(padL + Math.max(bw, 1) + 6).toFixed(1)}" y="${(y + barH / 2 + 3.5).toFixed(1)}" font-size="10" fill="${T.ink2}" class="aa-tab">${fmt(v)}</text>`;
       });
     });
     s += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${plotBottom}" stroke="${T.axis}"/>`;
@@ -365,7 +394,7 @@ const ChartKit = (function () {
         a = a1;
       });
     }
-    s += `<text x="${cx}" y="${cy - 1}" text-anchor="middle" font-size="31" font-weight="700" fill="${T.ink}" class="tabnum">${fmt(total)}</text>`;
+    s += `<text x="${cx}" y="${cy - 1}" text-anchor="middle" font-size="31" font-weight="700" fill="${T.ink}" class="aa-tab">${fmt(total)}</text>`;
     s += `<text x="${cx}" y="${cy + 17}" text-anchor="middle" font-size="12.5" fill="${T.muted}">всего</text>`;
     return `<svg viewBox="0 0 ${S} ${S}" preserveAspectRatio="xMidYMid meet" style="max-width:200px">${s}</svg>`;
   }
@@ -373,11 +402,11 @@ const ChartKit = (function () {
   // Легенда для donutChart (и вообще для любого "категория → цвет + значение")
   // — строки, БЕЗ обёртки-контейнера (в отличие от legend() выше): вызывающая
   // сторона сама решает, во что заворачивать — колонкой рядом с пончиком
-  // (dashboard.js's .dash-dleg) или центрированным блоком под ним (rich-report.js's
+  // (dashboard.js's .aa-dleg) или центрированным блоком под ним (rich-report.js's
   // .rr-pie-legend), см. .ck-legend-item в css/styles.css (блокируется до
   // ширины родителя внутри flex-колонки автоматически, без отдельного правила).
   function donutLegend(items, colors) {
-    return items.map((d, i) => `<span class="ck-legend-item"><span class="ck-swatch" style="background:${colors[i % colors.length]}"></span><span class="ck-legend-name">${esc(flat(d[0]))}</span><span class="ck-legend-value tabnum">${fmt(d[1] || 0)}</span></span>`).join('');
+    return items.map((d, i) => `<span class="ck-legend-item"><span class="ck-swatch" style="background:${colors[i % colors.length]}"></span><span class="ck-legend-name">${esc(flat(d[0]))}</span><span class="ck-legend-value aa-tab">${fmt(d[1] || 0)}</span></span>`).join('');
   }
 
   function tableElement(el) {
@@ -400,7 +429,7 @@ const ChartKit = (function () {
   function progressElement(el) {
     return `<div class="rr-progress">${el.items.map(it => `
       <div class="rr-progress-item">
-        <div class="rr-progress-top"><span>${esc(it.label)}</span><span class="tabnum">${it.pct}%</span></div>
+        <div class="rr-progress-top"><span>${esc(it.label)}</span><span class="aa-tab">${it.pct}%</span></div>
         <div class="rr-progress-track"><div class="rr-progress-fill" style="width:${Math.max(0, Math.min(100, it.pct))}%"></div></div>
         ${it.note ? `<div class="rr-progress-note">${esc(it.note)}</div>` : ''}
       </div>`).join('')}</div>`;

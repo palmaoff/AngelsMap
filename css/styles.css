@@ -704,6 +704,74 @@ html, body {
 .modal__error { flex: 1; min-width: 0; font-size: 12px; color: #cf3438; }
 .modal__footer .btn { flex: 0 0 auto; padding: 0 18px; }
 
+/* Спиннер внутри кнопки (см. .btn#insImpUpload "Загрузка…" в
+   js/insurance-import.js) — тот же кольцевой @keyframes spin, что и у пилюли
+   счётчика слоя, но белый на акцентном фоне кнопки, не в паре с текстом. */
+.mini-spin {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 6px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ------------------------------------------------ Загрузка реестра страхования
+   (js/insurance-import.js) — модалка переиспользует .modal/.modal__header/
+   .modal__body/.modal__footer/.btn целиком, здесь только содержимое тела. */
+.ins-imp-pick { padding: 18px; }
+.ins-imp-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.ins-imp-file:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-softer); }
+.ins-imp-file input[type="file"] { display: none; }
+.ins-imp-hint { margin: 12px 2px 0; font-size: 12px; line-height: 1.5; color: var(--text-faint); }
+
+.ins-imp-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 18px 18px 4px; }
+.ins-imp-tile {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  background: var(--accent-softer);
+}
+.ins-imp-tile__num { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ins-imp-tile__lab { margin-top: 2px; font-size: 11px; color: var(--text-muted); }
+.ins-imp-tile--ok   .ins-imp-tile__num { color: #0f9b82; }
+.ins-imp-tile--warn .ins-imp-tile__num { color: #c47f00; }
+.ins-imp-tile--err  .ins-imp-tile__num { color: #cf3438; }
+
+/* Переиспользует .report-table-wrap (см. reports.js) — тот же построчный
+   паттерн; свой max-height, т.к. здесь родитель не flex-колонка на весь
+   экран, как у вкладки «Отчёты», а прокручиваемое тело модалки. */
+.ins-imp-table-wrap { margin: 14px 18px 18px; max-height: 50vh; }
+
+.ins-imp-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ins-imp-status--ok    { background: rgba(27,179,151,0.12); color: #0f9b82; }
+.ins-imp-status--warn  { background: rgba(240,160,20,0.14); color: #c47f00; }
+.ins-imp-status--err   { background: rgba(215,25,28,0.12);  color: #cf3438; }
+.ins-imp-status--muted { background: var(--accent-softer);  color: var(--text-muted); }
+
 /* Форма настроек слоя — разметку (какие поля есть у слоя) отдаёт сервер
    (см. map.js: openLayerSettings), здесь только generic-стили под любые
    поля любого слоя: подпись + один инпут/селект на строку, чекбокс — в ряд. */
@@ -883,6 +951,42 @@ html, body {
 }
 .settings-form__check-row.is-hidden { display: none; }
 
+/* ------------------------------------------------------ Добавление ДТП по клику
+   (js/dtp-create-form.js) — форма переиспользует .modal/.modal--wide/.settings-
+   form/.settings-form--grid/.settings-form__row/__section-title/__label целиком
+   для стилей полей (та же generic-раскладка "подпись + один инпут на строку",
+   что и у форм настроек слоя/дашборда/отчёта) — переиспользуются только CSS-
+   классы, не сам контроллер js/settings-form.js (см. CLAUDE.md, "Создание ДТП
+   по клику"). Здесь — только то, чего в settings-form нет: предупреждение о
+   недоступном геокодировании, информационная строка "Место: …" и сворачиваемый
+   блок участника. */
+.dtp-create__warn {
+  color: #c47f00;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.dtp-create__hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.dtp-create__participant summary {
+  cursor: pointer;
+  padding: 10px 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.dtp-create__participant summary:hover { color: var(--accent); }
+.dtp-create__participant-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 4px 18px 14px;
+}
+@media (max-width: 640px) {
+  .dtp-create__participant-grid { grid-template-columns: 1fr; }
+}
+
 /* ------------------------------------------------------------- Boot screen */
 /* Первый кадр страницы (см. index.html) — заполняет паузу до появления либо
    .auth-overlay (мгновенно), либо готовой карты (MapApp.init() — /config,
@@ -1019,6 +1123,31 @@ html, body {
   transition: all 0.15s;
 }
 .auth-badge__logout:hover { background: rgba(215,25,28,0.08); border-color: #cf3438; color: #cf3438; }
+
+/* ------------------------------------------------------------- Brandbar */
+.brand {
+  position: absolute;
+  left: 50%;
+  bottom: var(--gap);
+  transform: translateX(-50%);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 20px;
+  background: var(--panel-bg-blur);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.brand b { color: var(--accent); }
 
 /* ------------------------------------------------------- Нижняя панель инструментов */
 /* Единая строка по центру снизу: масштаб — переключатель подложки — линейка.
@@ -1223,6 +1352,70 @@ html, body {
 }
 .view-switch__btn:hover { color: var(--text); }
 .view-switch__btn.is-active { background: var(--accent); color: #fff; }
+
+/* Кнопка загрузки реестра страхования (см. js/insurance-import.js) — в той же
+   пилюле, что и переключатели экранов, отделена тонкой чертой: она не меняет
+   currentView (не входит в VIEWS), поэтому не может переиспользовать
+   .view-switch__btn как есть — то стилизовано под "активную вкладку", у этой
+   кнопки такого состояния нет, она просто открывает модалку. */
+.view-switch__divider { width: 1px; align-self: stretch; margin: 4px 2px; background: var(--border); }
+.view-switch__action {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 16px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.view-switch__action:hover { background: var(--accent-soft); color: var(--accent); }
+.view-switch__action svg { width: 16px; height: 16px; display: block; }
+
+/* ---------------------------------------------------------------- Дашборд */
+.dashboard { max-width: 960px; margin: 0 auto; padding: var(--view-content-top) calc(var(--gap) * 2) calc(var(--gap) * 2); }
+.dashboard__stub-note {
+  display: inline-block;
+  margin-bottom: var(--gap);
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+.dashboard__toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--gap); flex-wrap: wrap; gap: var(--gap); }
+.dashboard__title { font-size: 20px; font-weight: 700; color: var(--text); }
+.dashboard__title small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 500; color: var(--text-muted); }
+.period-switch { display: flex; gap: 2px; padding: 3px; border-radius: 14px; background: var(--panel-bg); border: 1px solid var(--border); }
+.period-switch__btn { border: none; background: transparent; color: var(--text-muted); font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 10px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.period-switch__btn:hover { color: var(--text); }
+.period-switch__btn.is-active { background: var(--accent); color: #fff; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--gap); margin-bottom: var(--gap); }
+.kpi-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-soft);
+  padding: 16px 18px;
+}
+.kpi-card__value { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.kpi-card__label { margin-top: 4px; font-size: 12.5px; color: var(--text-muted); }
+
+.chart-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-soft);
+  padding: 16px 18px;
+}
+.chart-card__title { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+.chart-card svg { display: block; width: 100%; height: 120px; }
+.chart-card .chart-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.chart-card .chart-fill { fill: var(--accent-softer); stroke: none; }
 
 /* ---------------------------------------------------------------- Отчёты */
 .reports { display: flex; height: 100%; position: relative; }
@@ -1480,7 +1673,7 @@ html, body {
    Таблицы/графики вперемешку в одной вкладке "Отчёты" — .rr-root заменяет
    .report-table-wrap внутри .reports__preview (см. reports.js: renderReport), тот же
    принцип "сам скроллится, не сжимает панель". Легенда/подсказки переиспользуют
-   общий .ck-legend/.ck-swatch (см. js/chart-kit.js) и существующие .tabnum/.chart-tip
+   общий .ck-legend/.ck-swatch (см. js/chart-kit.js) и существующие .aa-tab/.aa-tip
    (см. Дашборд ниже) — здесь только то, чего у дашборда/списка-таблицы ещё не
    было: секции, карточки, сетка элементов внутри карточки, прогресс-бар плана
    мероприятий. */
@@ -1523,16 +1716,16 @@ html, body {
 .rr-block--wide svg { max-width: 760px; }
 /* Общий неймспейс легенды/свотча для всей разметки, которую строит
    js/chart-kit.js (legend/donutLegend) — введён 2026-08-24 вместо двух
-   параллельных наборов классов (.dash-li/.dash-s только для разметки dashboard.js,
-   отдельный дубль .rr-legend .dash-li/.dash-s у rich-report.js, заведённый именно
+   параллельных наборов классов (.aa-li/.aa-s только для разметки dashboard.js,
+   отдельный дубль .rr-legend .aa-li/.aa-s у rich-report.js, заведённый именно
    потому, что общего неймспейса/модуля не было, см. историю в chart-kit.js).
    .ck-legend — контейнер (ряд с переносом), .ck-legend-item — один пункт
    (свотч + подпись), .ck-swatch — сам цветной квадратик. .ck-legend-name/
    .ck-legend-value — для легенды donutChart (подпись категории + число), где
    у элемента ДВЕ текстовых части, а не одна, как у обычной legend(). Вложенным
-   в flex-колонку контекстам (.dash-dleg ниже) .ck-legend-item растягивается на
+   в flex-колонку контекстам (.aa-dleg ниже) .ck-legend-item растягивается на
    всю строку сама — inline-flex "блокируется" браузером, когда становится
-   flex-элементом (CSS Display L3), поэтому отдельный override для .dash-dleg не
+   flex-элементом (CSS Display L3), поэтому отдельный override для .aa-dleg не
    нужен: margin-left:auto у .ck-legend-value прижимает число к правому краю. */
 /* ChartKit.hBarList — горизонтальные полосы с подписью НАД полосой, разметка
    HTML (не SVG), см. комментарий у самой функции в js/chart-kit.js про то,
@@ -1541,7 +1734,7 @@ html, body {
    заполняют одинаковую высоту без подгонки числа строк в JS.
    Шрифт здесь в НАСТОЯЩИХ css-пикселях и не зависит ни от числа категорий,
    ни от размера окна — в этом и был смысл ухода от SVG. */
-/* flex:1/width:100% — .dash-chart это flex-строка (см. ниже), без них блок встал
+/* flex:1/width:100% — .aa-chart это flex-строка (см. ниже), без них блок встал
    бы по ширине контента, а не ячейки. */
 .ck-hbars { display: flex; flex-direction: column; justify-content: space-between;
   flex: 1; width: 100%; height: 100%; min-height: 0; min-width: 0; }
@@ -1611,14 +1804,12 @@ html, body {
 .rr-progress-fill { height: 100%; border-radius: 999px; background: var(--accent); }
 .rr-progress-note { font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
 
-/* -------------------------------------- Дашборд · сетка шаблона (.dash-*)
-   Строительные блоки для шаблонов дашборда плагинов (dashboardTemplates, см.
-   js/backends/_demo.js): плотная сетка на всю высоту экрана — без внутренней
-   прокрутки на обычном мониторе (графики тянутся по высоте своих ячеек).
-   Раскладка .dash-layout — фильтр-строка сверху, слева KPI + плитки, справа
-   динамика / две панели полос / ряд пончиков. Шаблону с другой раскладкой
-   достаточно своих селекторов поверх .dash-panel/.dash-chart/.dash-flt. */
-.view--dashboard .dash-layout {
+/* -------------------------------------- Дашборд · Сводка аварийности (aa-dash)
+   Плотная сетка на всю высоту экрана Дашборда — без внутренней прокрутки на
+   обычном мониторе (графики тянутся по высоте своих ячеек). Небольшие отступы
+   слева/справа. Заменяет прежнюю заглушку (.dashboard/.kpi-*), которые оставлены
+   в файле, т.к. ими ещё пользуется reports.js. Разметку рендерит js/dashboard.js. */
+.view--dashboard .aa-dash {
   height: 100%; overflow: hidden;
   padding: var(--view-content-top) 30px 16px;
   display: grid; gap: 9px;
@@ -1629,101 +1820,342 @@ html, body {
     "left right";
 }
 
-/* Левая колонка: KPI вертикально, под ними плитки 2×N */
-.dash-left { grid-area: left; display: grid; grid-template-rows: repeat(3, auto) 1fr; gap: 9px; min-height: 0; }
-/* Правая колонка: динамика (сверху), две панели полос рядом, ряд пончиков.
-   «Динамике» отдано больше высоты: столбцы по месяцам с подписями значений —
-   самый плотный по вертикали график экрана, а полосы (ChartKit.hBarList,
-   подпись над полосой) своей высоты почти не требуют. */
-.dash-right { grid-area: right; display: grid; gap: 9px; min-height: 0; min-width: 0;
+/* Дашборд «Пассажиропоток» (traffic-monitor) — своя раскладка без KPI-сайдбара:
+   строка фильтров, затем оба графика рядом в один ряд (как в 1С), затем
+   таблица остановок на всю ширину. Переиспользует .aa-flt/.aa-panel,
+   но .aa-flt несёт зашитый `grid-area: flt`, рассчитанный на grid-template-areas
+   дашборда аварийности (.aa-dash) — здесь такой именованной области нет, и без
+   сброса Chrome всё равно резервирует под "flt" отдельную колонку/строку,
+   разваливая раскладку на 2 колонки с фильтрами не на своём месте. Сбрасываем
+   на auto явно.
+   Колонки графиков — фиксированные 470px/1fr (не 1fr 1fr): рейтинг-лист
+   маршрутов (rankList) — плотный список коротких строк, часовому графику
+   (hourAreaLine, 24 категории) нужно заметно больше горизонтали для читаемых
+   подписей по оси. Раньше это считалось в JS через ChartKit.columnChartWidth
+   (обе колонки были columnChart с "родной" шириной, зависящей от числа
+   категорий) — с уходом от columnChart на этих двух графиках (2026-09-04,
+   редизайн читаемости, см. js/backends/traffic-monitor.js) эта зависимость
+   исчезла, фиксированная пропорция теперь единственный источник правды.
+   2026-09-05, «вписать в экран» (см. Инструкция_ДашбордПассажиропоток_
+   ВписатьВЭкран.md): раньше .pt-dash был `align-content: start` с неявными
+   auto-строками — высоту диктовал контент (min-height:440px на панелях
+   графиков + max-height:420px на таблице остановок), из-за чего на
+   стандартном мониторе (900px доступной высоты) экран не помещался и
+   появлялась внешняя прокрутка. Теперь строки грида явные и делят
+   ФИКСИРОВАННУЮ высоту экрана: auto/auto под фильтры и KPI, 1fr графикам,
+   0.75fr — остановкам (тем полезнее собственная прокрутка длинной таблицы,
+   чем ещё урезать графики). Старое поведение (скролл, content-based
+   минимумы) возвращается ниже целевой высоты — см. @media (max-height:
+   820px) в конце файла.
+   ВАЖНО (актуально и в новой модели, но по другой причине): раньше, при
+   auto-строках, `min-height: 0` на .pt-charts было НЕЛЬЗЯ — Chrome
+   схлопывал контейнер до высоты первой панели, вторая (с фиксированным
+   .aa-panel{min-height}) вылезала за пределы родителя, наезжая на таблицу
+   остановок. С явным `1fr` на строке графиков всё наоборот: .pt-charts как
+   элемент этой строки ОБЯЗАН иметь `min-height: 0`, иначе не сможет
+   сжаться ниже суммарной высоты своего контента (грид-элементам неявно
+   выставлен `min-height: auto`, то есть «не меньше контента») — без этого
+   строка растянула бы .pt-dash выше доступных 900px и всё равно появилась
+   бы внешняя прокрутка, только на уровень выше. */
+/* Отступ сверху/снизу и зазор строк ужаты по «ручкам» §7 инструкции
+   (--view-content-top 96→72, нижний паддинг 16→10, gap 12→10) — по замеру в
+   браузере 1920×900 укладывался и без этого, но на 1536×864 (масштаб
+   Windows 125%, тоже целевой сценарий) свободный после auto-строк остаток
+   ощутимо меньше, и без этой экономии панели графиков/остановок не
+   получали бы достаточно высоты. Переопределение только здесь, не в
+   :root — иначе изменился бы отступ у карты и отчётов (см. §7 п.1
+   инструкции). */
+.view--dashboard .pt-dash {
+  height: 100%; overflow: hidden; padding: 72px 14px 10px;
+  display: grid; gap: 10px;
+  grid-template-rows: auto auto 1fr 0.75fr;
+}
+.pt-dash > .aa-flt { grid-area: auto; }
+.pt-charts { display: grid; grid-template-columns: 470px 1fr; gap: 12px; min-height: 0; }
+
+/* TailAdmin-инспирированный реskin дашборда «Пассажиропоток» (2026-09-04) —
+   единственный дашборд клиента с таким видом, поэтому всё через .pt- селекторы
+   поверх общих .aa-panel/.report-table, а не изменением их базовых правил:
+   accident-analysis (тот же .aa-panel) должен остаться как был.
+   1) Плашки-метрики (.pt-kpis/.pt-kpi) — паттерн TailAdmin stat card: круглый
+      цветной бейдж-иконка слева, число+подпись справа. Не переиспользует
+      .aa-kpi (тот — компактный сайдбар ДТП/Ранено/Погибло accident-analysis,
+      здесь другой набор метрик и раскладка в ряд, а не колонкой). Данные
+      берутся из уже вычисленных на сервере routes/hours — новых полей API не
+      требуется (см. kpiRow() в js/backends/traffic-monitor.js).
+   2) Карточки графиков/таблицы (.pt-dash .aa-panel) — крупнее радиус и мягче
+      тень, свой заголовок с иконкой-бейджем вместо квадратного aa-tick
+      (.pt-panel-head/.pt-panel-icon, разметка тоже только в
+      renderTrafficMonitorDashboard — общий h3.aa-tick других дашбордов не
+      трогаем). */
+.pt-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+/* Иконка 44→38px, паддинг 14/18→10/14 — «ручка» §7 (см. .view--dashboard
+   .pt-dash выше): строка плашек — auto-высоты, забирает готовую высоту у
+   строк графиков/остановок (1fr/0.75fr) ещё до их расчёта, так что экономия
+   здесь напрямую увеличивает то, что достаётся графикам на низких экранах. */
+.pt-kpi { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 16px;
+  padding: 10px 14px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-soft); }
+.pt-kpi__icon { flex: none; width: 38px; height: 38px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center; }
+.pt-kpi__icon svg { width: 19px; height: 19px; }
+.pt-kpi__body { min-width: 0; }
+.pt-kpi__value { font-size: 21px; font-weight: 700; letter-spacing: -.01em; color: var(--text);
+  line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt-kpi__label { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Паддинг ужат 14/16/12 → 10/12/10 (2026-09-05, «вписать в экран», см. §7
+   «ручки» инструкции) — по факту замера в браузере на 1920×900 топ-10
+   маршрутов (10 строк по 22px, см. .pt-rank-list ниже) на исходном паддинге
+   не помещался в панель на 3-4px (визуально малозаметно, но формально
+   overflow) — это первая «ручка» из ладдера, отбирающая воздух у ВСЕХ
+   панелей дашборда разом, а не подгонка одного конкретного блока. */
+.pt-dash .aa-panel { border-radius: 16px; box-shadow: var(--shadow-soft); padding: 10px 12px 10px; }
+/* Панель занимает всю строку 0.75fr (см. .view--dashboard .pt-dash выше) и по
+   умолчанию сжалась бы до шапки, если бы .pt-stops-wrap когда-нибудь остался
+   без строк, — 200px (шапка + ~3 строки) не даёт блоку выродиться на очень
+   низком/зумленном окне до срабатывания запасного режима (@media (max-height:
+   820px)). */
+.pt-dash .pt-stops { min-height: 200px; }
+/* align-items: flex-start (не center) — заголовок теперь двухстрочный
+   (h3 + поясняющий p, см. .pt-panel-titles ниже), иконка-бейдж должна
+   держаться у верхней строки, а не съезжать к вертикальному центру блока. */
+.pt-panel-head { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 8px; }
+.pt-panel-icon { flex: none; width: 30px; height: 30px; border-radius: 9px; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center; }
+.pt-panel-icon svg { width: 16px; height: 16px; }
+/* Вторая строка под заголовком панели — короткая подпись, что именно
+   показывает график/таблица (период/срез данных); необязательная — panelHead()
+   рендерит <p> только если ей передали subtitle (см. js/backends/traffic-monitor.js). */
+.pt-panel-titles h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.pt-panel-titles p { margin: 2px 0 0; font-size: 12px; color: var(--text-faint); }
+
+/* Легенда-подпись под графиками rankList/hourAreaLine (2026-09-04, редизайн
+   читаемости) — своя, не ChartKit.legend()/.ck-legend: у неё текст поясняет
+   КАК читать кодировку графика ("Вошло — длина полосы"), а не просто называет
+   серию, так что переиспользовать общий компонент не вышло без потери смысла. */
+.pt-legend { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+.pt-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pt-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+
+/* Рейтинг-лист «Топ N маршрутов» (rankList(), js/backends/traffic-monitor.js)
+   — одна полоса на строку (Вошло), число Вышло рядом простым текстом, в
+   собственной колонке (не поверх полосы — см. её комментарий в JS).
+   Грид — на САМОМ .pt-rank-list, а не на каждой .pt-rank-row по отдельности
+   (та лишь display:contents): независимые per-row грид-треки давали разную
+   ширину колонки бейджа/значения на каждой строке (48.5% полосы на 4-значных
+   именах маршрутов вроде "28ч" против 2-значных), из-за чего полосы и правая
+   колонка "вышло" не выстраивались по одной вертикали между строками. Общий
+   грид на списке — единственный способ выровнять колонки по-настоящему. */
+/* Строка 22px и зазор 6px (было 26px/9px) — 2026-09-05, «вписать в экран»:
+   при фиксированной высоте строки графиков (см. .view--dashboard .pt-dash
+   выше) 10 строк должны влезать без собственного скролла даже на 900px
+   высоты экрана; см. Инструкция_ДашбордПассажиропоток_ВписатьВЭкран.md §5.2. */
+.pt-rank-list { display: grid; grid-template-columns: 20px auto 1fr auto; align-items: center;
+  gap: 6px 10px; flex: 1; align-content: center; }
+.pt-rank-row { display: contents; }
+.pt-rank-row__n { font-size: 11px; font-weight: 700; color: var(--text-faint); text-align: right; }
+.pt-rank-row__badge { height: 22px; min-width: 40px; padding: 0 8px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent); display: flex; align-items: center;
+  justify-content: center; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pt-rank-row__bar-wrap { position: relative; height: 22px; min-width: 0; }
+.pt-rank-row__track { position: absolute; inset: 0; border-radius: 7px; background: var(--bg-app); }
+.pt-rank-row__fill { position: absolute; top: 0; left: 0; bottom: 0; border-radius: 7px;
+  background: linear-gradient(90deg, #2a78d6, #4f93e6); }
+.pt-rank-row__in { position: absolute; top: 0; bottom: 0; left: 10px; display: flex; align-items: center;
+  font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; }
+/* Всегда на сплошном фоне панели (не на полосе) — гарантированный контраст
+   независимо от длины полосы этой строки, см. правку выше. */
+.pt-rank-row__out { font-size: 11.5px; color: var(--text-faint); white-space: nowrap; text-align: right; }
+
+/* Часовой график (hourAreaLine(), js/backends/traffic-monitor.js) — площадь
+   (Вошло) + линия (Вышло), растягивается на всю высоту панели.
+   2026-09-05: `height: 100%` вместо прежнего `auto` — при auto высота SVG
+   считалась ОТ ЕГО ШИРИНЫ (через viewBox-пропорцию), а не от высоты ячейки,
+   что было главным источником рассинхрона в резиновой сетке (ячейка с
+   фиксированной высотой, SVG внутри — с высотой, зависящей от ширины).
+   `preserveAspectRatio="xMidYMid meet"` в самом SVG (см. hourAreaLine())
+   не даёт пропорциям исказиться — лишь центрирует их в изменившемся боксе,
+   `none` не используется, иначе исказился бы текст подписей.
+   `min-height: 0` обязателен (как у .aa-chart) — без него автоматический
+   минимум флекс-item'а считается по контенту, а контент здесь — SVG с
+   `height:100%`, чей процент не может разрешиться до первого прохода
+   раскладки и который до этого момента откатывается к intrinsic-размеру по
+   пропорциям viewBox (на момент бага — 680:320 от текущей ширины колонки,
+   см. hourAreaLine()) — на широкой колонке это давало ~640px, что раздувало
+   .pt-hour-chart и весь .aa-panel далеко за пределы строки 1fr, наезжая на
+   таблицу остановок ниже. Актуальный viewBox другой (1200×248, подобран по
+   замеру уже ПОСЛЕ этого фикса — см. комментарий в hourAreaLine()), но сама
+   причина бага и необходимость min-height:0 от выбора конкретных чисел
+   viewBox не зависят. */
+.pt-hour-chart { flex: 1; min-height: 0; display: flex; align-items: center; margin-top: 6px; min-width: 0; }
+.pt-hour-chart svg { width: 100%; height: 100%; display: block; }
+
+/* Таблица остановок со встроенными мини-полосами (cellBarTable(),
+   js/backends/traffic-monitor.js) — свой набор классов, не .report-table:
+   числовые ячейки несут отдельную полосу-индикатор, что не укладывается в
+   generic table-walker ChartKit.tableElement. Прокручиваемая обёртка + липкая
+   шапка — тот же паттерн, что .report-table-wrap/.report-table thead th. */
+/* 2026-09-05: flex:1/min-height:0 вместо фиксированного max-height — обёртка
+   занимает остаток высоты своей панели (та, в свою очередь, получает высоту
+   от строки 0.75fr .pt-dash, см. выше), а не диктует контейнеру собственную
+   высоту по контенту. min-height:200px на самой панели (.pt-dash .pt-stops
+   ниже) — защита от вырождения в одну шапку на сильно ужатом окне; ниже
+   820px эта модель уступает место старой (max-height) — см. @media
+   (max-height: 820px) в конце файла. Липкая шапка продолжает работать. */
+.pt-stops-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.pt-stops-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.pt-stops-table th, .pt-stops-table td { padding: 10px; text-align: left; }
+/* z-index обязателен (в отличие от .report-table thead th, тот же паттерн
+   без него) — там строки несут только текст, а здесь .pt-cellbar__fill в
+   каждой ячейке position:absolute (z-index:auto). Без явного z-index липкая
+   `position:sticky` шапка и абсолютные полосы обеих попадают в одну и ту же
+   "positioned, z-index:auto" категорию порядка отрисовки, и решает порядок в
+   DOM — thead раньше tbody, поэтому полосы прокручивающихся строк рисовались
+   ПОВЕРХ шапки при скролле. */
+.pt-stops-table thead th {
+  background: linear-gradient(var(--accent-softer), var(--accent-softer)), var(--panel-bg);
+  color: var(--text-muted); font-weight: 700; font-size: 10.5px; letter-spacing: 0.03em;
+  text-transform: uppercase; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1;
+}
+.pt-stops-table tbody td { border-top: 1px solid var(--border); }
+.pt-stops-table tbody tr:first-child td { border-top: none; }
+.pt-stops-table tbody tr:nth-child(even) { background: var(--accent-softer); }
+.pt-stop-name { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.pt-cellbar { display: flex; align-items: center; gap: 10px; }
+.pt-cellbar__num { width: 62px; text-align: right; font-weight: 700; font-size: 13px; flex: none; }
+.pt-cellbar__track { flex: 1; height: 8px; border-radius: 5px; background: var(--bg-app); position: relative; overflow: hidden; }
+.pt-cellbar__fill { position: absolute; inset: 0 auto 0 0; border-radius: 5px; }
+.pt-fill-in { background: #2a78d6; }
+.pt-fill-out { background: #e34948; }
+
+/* Левая колонка: KPI (ДТП/Ранено/Погибло) вертикально, под ними факторы 2×5 */
+.aa-left { grid-area: left; display: grid; grid-template-rows: repeat(3, auto) 1fr; gap: 9px; min-height: 0; }
+/* Правая колонка: динамика (сверху), виды ДТП | нарушения, пончики.
+   Пропорции строк (2026-09-05, редизайн читаемости дашборда аварийности):
+   1.12/1.14/1 → 1.35/1.1/1. «Динамике» добавлено за счёт строки с полосами:
+   у неё 6 месяцев × 3 серии со всегда видимыми подписями значений — это самый
+   плотный по вертикали график экрана, тогда как «Виды ДТП»/«Виды нарушений»
+   после перехода на подпись-над-полосой (ChartKit hBarChart labelsOnTop) стали
+   тоньше и своей прежней высоты уже не требуют. Пончики (cnd) не тронуты —
+   они и так работали. */
+.aa-right { grid-area: right; display: grid; gap: 9px; min-height: 0; min-width: 0;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: minmax(0,1.35fr) minmax(0,1.1fr) minmax(0,1fr);
   grid-template-areas: "dyn dyn" "vid nar" "cnd cnd"; }
-.tabnum { font-variant-numeric: tabular-nums; }
+.aa-tab { font-variant-numeric: tabular-nums; }
 
-.dash-flt { grid-area: flt; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+.aa-flt { grid-area: flt; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
   font-size: 13.5px; color: var(--text-muted); background: var(--panel-bg);
   border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 16px; }
-.dash-flt b { color: var(--text); font-weight: 600; }
-.dash-flt-title { font-size: 15px; font-weight: 700; color: var(--text); margin-right: 4px; }
-.dash-flt-spacer { margin-left: auto; color: var(--text-faint); }
-.dash-flt-upd { color: var(--text-faint); white-space: nowrap; }
+.aa-flt b { color: var(--text); font-weight: 600; }
+.aa-flt-title { font-size: 15px; font-weight: 700; color: var(--text); margin-right: 4px; }
+.aa-flt-spacer { margin-left: auto; color: var(--text-faint); }
+.aa-flt-upd { color: var(--text-faint); white-space: nowrap; }
 /* Спиннер вместо даты на время load() (см. DashboardApp.setUpdating в js/dashboard.js) —
    тот же spin@keyframes/размер кольца, что у пилюли счётчика слоя (.layer-item__count). */
-.dash-flt-upd .dash-flt-spin { display: none; width: 9px; height: 9px; margin-left: 5px;
+.aa-flt-upd .aa-flt-spin { display: none; width: 9px; height: 9px; margin-left: 5px;
   border: 1.5px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
   vertical-align: -1px; animation: spin 0.7s linear infinite; }
-.dash-flt-upd.is-loading .dash-flt-upd-val { display: none; }
-.dash-flt-upd.is-loading .dash-flt-spin { display: inline-block; }
-.dash-flt-btn { flex: none; width: 28px; height: 28px; display: inline-flex; align-items: center;
+.aa-flt-upd.is-loading .aa-flt-upd-val { display: none; }
+.aa-flt-upd.is-loading .aa-flt-spin { display: inline-block; }
+.aa-flt-btn { flex: none; width: 28px; height: 28px; display: inline-flex; align-items: center;
   justify-content: center; font-size: 15px; line-height: 1; cursor: pointer; color: var(--text-muted);
   background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
   transition: background .12s, border-color .12s, color .12s; }
-.dash-flt-btn:hover { background: var(--hover-bg); border-color: var(--accent); color: var(--accent); }
-.dash-flt-btn:active { transform: translateY(1px); }
-.dash-flt-btn.is-busy { opacity: .5; pointer-events: none; }
+.aa-flt-btn:hover { background: var(--hover-bg); border-color: var(--accent); color: var(--accent); }
+.aa-flt-btn:active { transform: translateY(1px); }
+.aa-flt-btn.is-busy { opacity: .5; pointer-events: none; }
 
-.dash-kpi { height: 100%; background: var(--panel-bg); border: 1px solid var(--border);
+.aa-kpi { height: 100%; background: var(--panel-bg); border: 1px solid var(--border);
   border-radius: 12px; padding: 9px 14px; display: flex; align-items: center; gap: 14px; min-height: 0; }
-.dash-k-lab { font-size: 14px; color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
-.dash-sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-.dash-k-num { font-size: 38px; font-weight: 700; letter-spacing: -.02em; line-height: 1; color: var(--text); }
-.dash-k-side { font-size: 13px; color: var(--text-faint); line-height: 1.35; text-align: right; }
-.dash-delta { font-weight: 700; color: var(--text-muted); }
-.dash-delta.is-good { color: #12833a; }
+.aa-k-lab { font-size: 14px; color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.aa-sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.aa-k-num { font-size: 38px; font-weight: 700; letter-spacing: -.02em; line-height: 1; color: var(--text); }
+.aa-k-side { font-size: 13px; color: var(--text-faint); line-height: 1.35; text-align: right; }
+.aa-delta { font-weight: 700; color: var(--text-muted); }
+.aa-delta.is-good { color: #12833a; }
 
-.dash-panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px;
+.aa-panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px;
   padding: 8px 11px 9px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.dash-panel h3 { font-size: 14px; font-weight: 700; margin: 0 0 6px; display: flex; align-items: center; gap: 7px; color: var(--text); }
-.dash-panel h3 .dash-tick { width: 9px; height: 9px; border-radius: 2px; flex: none; }
-.dash-panel h3 .dash-lg { margin-left: auto; display: flex; gap: 13px; font-size: 12.5px; color: var(--text-muted); font-weight: 500; }
-.dash-panel h3 .dash-lg .dash-li { display: inline-flex; align-items: center; gap: 6px; }
-.dash-panel h3 .dash-lg .dash-s { width: 10px; height: 10px; border-radius: 2px; }
-.dash-chart { flex: 1; min-height: 0; min-width: 0; display: flex; }
-.dash-chart svg { width: 100%; height: 100%; }
+.aa-panel h3 { font-size: 14px; font-weight: 700; margin: 0 0 6px; display: flex; align-items: center; gap: 7px; color: var(--text); }
+.aa-panel h3 .aa-tick { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.aa-panel h3 .aa-lg { margin-left: auto; display: flex; gap: 13px; font-size: 12.5px; color: var(--text-muted); font-weight: 500; }
+.aa-panel h3 .aa-lg .aa-li { display: inline-flex; align-items: center; gap: 6px; }
+.aa-panel h3 .aa-lg .aa-s { width: 10px; height: 10px; border-radius: 2px; }
+.aa-chart { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.aa-chart svg { width: 100%; height: 100%; }
 
-.dash-cnd { grid-area: cnd; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; min-height: 0; }
-.dash-dcell { display: flex; gap: 10px; min-height: 0; align-items: center; }
-.dash-dcell .dash-chart { height: 100%; aspect-ratio: 1; flex: 0 0 auto; }
-/* .ck-legend-item внутри .dash-dleg (flex-колонка) блокируется браузером до
+.aa-cnd { grid-area: cnd; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; min-height: 0; }
+.aa-dcell { display: flex; gap: 10px; min-height: 0; align-items: center; }
+.aa-dcell .aa-chart { height: 100%; aspect-ratio: 1; flex: 0 0 auto; }
+/* .ck-legend-item внутри .aa-dleg (flex-колонка) блокируется браузером до
    полноширинной строки сама, см. комментарий у .ck-legend выше — здесь только
-   контейнер, отдельных .dash-dleg .ck-legend-item/.ck-swatch правил не нужно. */
-.dash-dleg { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+   контейнер, отдельных .aa-dleg .ck-legend-item/.ck-swatch правил не нужно. */
+.aa-dleg { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
 
-.dash-facwrap { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 8px; min-height: 0; }
-.dash-fac { min-width: 0; background: var(--panel-bg); border: 1px solid var(--border);
+.aa-facwrap { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 8px; min-height: 0; }
+.aa-fac { min-width: 0; background: var(--panel-bg); border: 1px solid var(--border);
   border-radius: 10px; padding: 7px 9px; display: flex; flex-direction: column; justify-content: center; text-align: center; }
-.dash-fac .dash-fl { font-size: 12px; color: var(--text-muted); line-height: 1.2; min-height: 29px; display: flex; align-items: center; justify-content: center; }
-.dash-fac .dash-fv { font-size: 22px; font-weight: 700; color: var(--accent); letter-spacing: -.01em; line-height: 1.1; }
-.dash-fac .dash-fc { font-size: 10px; color: var(--text-faint); }
+.aa-fac .aa-fl { font-size: 12px; color: var(--text-muted); line-height: 1.2; min-height: 29px; display: flex; align-items: center; justify-content: center; }
+.aa-fac .aa-fv { font-size: 22px; font-weight: 700; color: var(--accent); letter-spacing: -.01em; line-height: 1.1; }
+.aa-fac .aa-fc { font-size: 10px; color: var(--text-faint); }
 
-.chart-tip { position: fixed; z-index: 2000; pointer-events: none; opacity: 0;
+.aa-tip { position: fixed; z-index: 2000; pointer-events: none; opacity: 0;
   transform: translate(-50%, -140%); transition: opacity .08s;
   background: rgba(27,36,52,.94); color: #fff; font-size: 12px; padding: 5px 9px;
   border-radius: 7px; white-space: nowrap; box-shadow: var(--shadow-panel); }
-.chart-tip b { font-weight: 700; }
-@media (prefers-reduced-motion: reduce) { .chart-tip { transition: none; } }
+.aa-tip b { font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .aa-tip { transition: none; } }
 
 /* Узкие/низкие экраны — снимаем фикс. высоту, стекаем колонки, прокрутка внешнего .view.
    Графикам задаём явную высоту (иначе flex-ячейка без фикс. высоты схлопнулась бы в 0). */
 @media (max-width: 860px) {
-  .view--dashboard .dash-layout { height: auto; overflow: visible; padding: var(--view-content-top) 14px 16px;
+  .view--dashboard .aa-dash { height: auto; overflow: visible; padding: var(--view-content-top) 14px 16px;
     grid-template-columns: 1fr; grid-template-rows: auto auto auto; grid-template-areas: "flt" "left" "right"; }
-  .dash-left { grid-template-rows: none; grid-auto-rows: auto; }
-  .dash-right { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: auto;
+  .aa-left { grid-template-rows: none; grid-auto-rows: auto; }
+  .aa-right { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: auto;
     grid-template-areas: "dyn" "vid" "nar" "cnd"; }
-  .dash-cnd { grid-template-columns: 1fr; }
-  .dash-chart { height: 200px; }
-  .dash-dcell .dash-chart { height: 150px; }
+  .aa-cnd { grid-template-columns: 1fr; }
+  .aa-chart { height: 200px; }
+  .aa-dcell .aa-chart { height: 150px; }
+  /* Инлайновые пропорции .pt-charts (см. комментарий выше) на узких экранах не
+     нужны — «по часам» иначе продолжал бы сжиматься сильнее «Топ 10» вместо
+     стекания в один читаемый столбец. !important перебивает инлайн-style. */
+  .pt-charts { grid-template-columns: 1fr !important; }
 }
 
-/* Низкие окна: поджимаем метрики строки .ck-hbars, чтобы 6 категорий
-   укладывались в свою ячейку и на 768px-окне. Полосы — HTML, а не SVG (см.
-   ChartKit.hBarList — там же, почему), поэтому высота строки задаётся здесь и
-   сама не ужимается. Ниже ~740px высоты остаётся прокрутка списка
-   (.ck-hbars{overflow-y:auto}). line-height задан явно: нормальная (~1.35 у
-   11px) сама по себе съедала больше, чем экономят шрифт и полоса. */
+/* Дашборд «Пассажиропоток» ниже целевой высоты (2026-09-05, «вписать в
+   экран») — на 900px+ .pt-dash работает фиксированной сеткой без внешней
+   прокрутки (см. .view--dashboard .pt-dash выше); ниже 820px честно
+   признаём, что сжимать больше некуда без потери читаемости, и возвращаем
+   прежнее, content-based поведение: внешний скролл, панели растут по
+   контенту с разумным минимумом, вместо того чтобы 10 строк рейтинга или
+   часовой график вырождались в нечитаемую кашу внутри слишком тесной ячейки.
+   Порог 820 — заметно ниже целевых 900 (панель закладок браузера или
+   открытая консоль DevTools в 40–60px не должны сбрасывать фиксированную
+   раскладку), но выше типичного 768px-окна, которому она уже вредит.
+   Не конфликтует с @media (max-width: 860px) выше: та трогает только
+   .pt-charts (колонки, !important — всегда побеждает), эта — только .pt-dash
+   и обычные (не !important) min/max-height, так что при одновременном
+   срабатывании (узкое И низкое окно) стекание колонок всё равно побеждает. */
 @media (max-height: 820px) {
+  .view--dashboard .pt-dash {
+    height: auto; overflow-y: auto; align-content: start;
+    grid-template-rows: none; grid-auto-rows: auto;
+  }
+  .pt-charts .aa-panel { min-height: 420px; }
+  .pt-stops-wrap { max-height: 380px; }
+
+  /* Дашборд аварийности: поджимаем метрики строки .ck-hbars, чтобы 6 категорий
+     («Виды ДТП») укладывались в свою ячейку и на 768px-окне. Раньше эти полосы
+     были SVG и просто масштабировались; после перехода на HTML (см.
+     ChartKit.hBarList — там же, почему) высота строки задаётся в css и
+     сама не ужимается. Ниже ~740px высоты остаётся прокрутка списка
+     (.ck-hbars{overflow-y:auto}) — на таком экране левая колонка дашборда
+     не помещается и без этого. */
+  /* line-height задан явно: нормальная (~1.35 у 11px) сама по себе съедала
+     больше, чем экономят уменьшенные шрифт и полоса, и 6 строк всё равно не
+     помещались в ячейку 768px-окна. */
   .ck-hbar__top { margin-bottom: 2px; line-height: 1.15; }
   .ck-hbar__name { font-size: 11px; }
   .ck-hbar__val { font-size: 11px; }
@@ -1738,6 +2170,7 @@ html, body {
        воздух над контентом остаётся, просто чуть уже, чем на десктопе. */
     --view-content-top: 72px;
   }
+  .brand { display: none; }
   .view-switch__btn { padding: 7px 11px; font-size: 11.5px; }
   .reports { flex-direction: column; }
   .reports__list { flex: 0 0 auto; max-height: 40%; border-right: none; border-bottom: 1px solid var(--border); }
@@ -1748,65 +2181,355 @@ html, body {
   .reports__list-inner { width: 100%; }
 }
 
-/* ------------------------------------------ Дашборд · скелетон и ошибка
-   Оба состояния рисует ядро (js/dashboard.js: skeletonHtml/errorHtml), а не
-   шаблон плагина — разметка у них не зависит ни от одной схемы данных. */
+/* ==================================================================== */
+/* Дашборд «Чистые дороги» (.cd-*)                                       */
+/*                                                                       */
+/* Третий дашборд клиента и третий префикс — .aa-* у аварийности, .pt-* у */
+/* пассажиропотока, .cd-* здесь: общие базовые кирпичи (.aa-panel,        */
+/* .pt-kpi, .ck-hbar, .aa-flt-upd/.aa-flt-btn) переиспользуются как есть, */
+/* а всё, что специфично этому экрану, добавляется поверх своими          */
+/* селекторами — чтобы правка раскладки одного дашборда не задевала два   */
+/* других. Разметка — js/backends/clean-roads.js, раздел «Дашборд».       */
+/*                                                                       */
+/* Скелетон (.cd-skel) и карточка ошибки (.cd-err) рисуются ядром         */
+/* (js/dashboard.js), а не плагином, то есть достаются и accident-        */
+/* analysis/traffic-monitor; префикс у них тот же просто потому, что      */
+/* заведены они этой же задачей и в этом же блоке.                        */
+/* ==================================================================== */
+
 .view--dashboard {
-  /* Локальные токены «ошибка»/«мягкий акцент» — в :root их нет, ни одному
-     другому экрану красный статус пока не нужен. */
-  --dash-danger: #b3261e;
-  --dash-danger-bg: rgba(179, 38, 30, .09);
-  --dash-accent-bg: rgba(43, 87, 212, .10);
+  /* Локальный токен: «плохо/истекает» (полоса подрядчика ниже трети парка,
+     дата окончания контракта внутри периода). В :root его нет — ни одному
+     другому экрану клиента красный статус пока не нужен, а добавление
+     глобального токена задело бы палитру целиком. */
+  --cd-danger: #b3261e;
+  --cd-danger-bg: rgba(179, 38, 30, .09);
+  --cd-accent-bg: rgba(43, 87, 212, .10);
 }
 
-.dash-btn { height: 36px; padding: 0 16px; border: 1px solid var(--border-strong);
+.cd-dash {
+  box-sizing: border-box; min-height: 100%;
+  padding: var(--view-content-top) 16px 16px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+
+/* ----------------------------------------------------- строка фильтров */
+.cd-flt {
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: var(--shadow-soft); padding: 7px 12px;
+}
+.cd-flt__label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+/* Оттесняет «Обновлено …» и ⟳ к правому краю — как .aa-flt-spacer у
+   соседних дашбордов, только без собственного содержимого. Слева от разрыва
+   остаются период и шестерёнка, справа — состояние и обновление. */
+.cd-flt__upd { margin-left: auto; font-size: 12px; }
+.cd-flt__settings, .cd-flt__refresh { flex: none; }
+
+.cd-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+  background: var(--panel-bg); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); color: var(--text-muted);
+  font: 600 12px/1 inherit; cursor: pointer; white-space: nowrap;
+}
+.cd-chip svg { width: 13px; height: 13px; flex: none; }
+.cd-chip:hover { border-color: var(--accent); color: var(--accent); }
+.cd-chip--period { height: 30px; padding: 0 11px; color: var(--text); font-size: 12.5px; }
+.cd-chip--period svg { width: 15px; height: 15px; }
+
+/* -------------------------------------------------- вход подрядчиком */
+.cd-scope {
+  flex: none; display: flex; align-items: center; gap: 11px;
+  background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-soft); padding: 11px 15px;
+}
+.cd-scope svg { flex: none; width: 18px; height: 18px; color: var(--accent); }
+.cd-scope p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text); }
+
+/* ------------------------------------------------------------ метрики */
+/* Пять плашек в ряд фиксированно, а не auto-fit, как у .pt-kpis: набор
+   метрик здесь закрытый и всегда один и тот же, «перенести шестую на
+   вторую строку» нечему. */
+.cd-kpis { flex: none; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+.cd-kpis .pt-kpi { border-radius: var(--radius); padding: 12px 14px; gap: 12px; }
+.cd-kpis .pt-kpi__icon { background: var(--cd-accent-bg); color: var(--accent); }
+.cd-kpis .pt-kpi__value { font-size: 26px; letter-spacing: -.02em; line-height: 1.1; }
+.cd-kpis .pt-kpi__label { font-size: 12.5px; font-weight: 600; color: var(--text); margin-top: 2px; }
+.cd-kpi__unit { font-size: 14px; font-weight: 600; color: var(--text-muted); margin-left: 4px; }
+.cd-kpi__sub { font-size: 11.5px; color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cd-kpi__sub--ok { color: #12833a; font-weight: 600; }
+
+/* --------------------------------------------------------- панели */
+.cd-mid { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 9px; }
+.cd-panel { display: flex; flex-direction: column; min-width: 0;
+  border-radius: var(--radius); box-shadow: var(--shadow-soft); padding: 11px 14px 10px; }
+.cd-panel h3 { margin: 0 0 2px; align-items: baseline; }
+.cd-panel__aside { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
+.cd-panel__sub { margin: 0 0 9px; font-size: 11.5px; color: var(--text-muted); }
+/* Счётчик строк в заголовке «Активные контракты · N». */
+.cd-count { padding: 2px 8px; border-radius: 20px; background: var(--cd-accent-bg);
+  color: var(--accent); font-size: 11.5px; font-weight: 700; }
+
+/* Подвал карточки: «Итого …». Лежит ВНЕ прокручиваемой области (см.
+   .cd-table-wrap--scroll) — итог сервера считается по всем строкам, и
+   уехать из виду вместе с прокруткой он не должен. */
+.cd-foot { margin-top: auto; padding-top: 9px; border-top: 1px solid var(--border);
+  display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.cd-foot__val { margin-left: auto; font-size: 15px; font-weight: 700; color: var(--text); }
+.cd-foot__dim { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+
+/* ------------------------------------------------------- подрядчики */
+.cd-hrows { display: flex; flex-direction: column; justify-content: space-between;
+  gap: 8px; min-height: 0; flex: 1; }
+/* Цвет заливки у общего .ck-hbar__fill приходит инлайном от ChartKit; здесь
+   полосы строятся своей разметкой, поэтому цвет задаём правилом. */
+.cd-dash .ck-hbar__fill { background: var(--accent); }
+.cd-dash .ck-hbar__fill.cd-low-fill { background: var(--cd-danger); }
+.cd-low { color: var(--cd-danger) !important; }
+.cd-hrow { border-radius: 8px; padding: 2px 4px; margin: -2px -4px; }
+.cd-hrow.is-clickable { cursor: pointer; }
+.cd-hrow.is-clickable:hover { background: var(--bg-app); }
+.cd-hrow.is-busy { opacity: .55; pointer-events: none; }
+
+/* ----------------------------------------------------------- таблицы */
+.cd-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.cd-table th { text-align: right; padding: 0 0 6px; font-size: 11px; font-weight: 600;
+  color: var(--text-muted); }
+.cd-table td { text-align: right; font-size: 12.5px; color: var(--text); }
+.cd-table tbody tr { border-top: 1px solid var(--border); }
+.cd-table tbody td { padding: 9px 0; }
+.cd-table .cd-dim { color: var(--text-muted); }
+.cd-table-wrap { min-width: 0; }
+/* Область списка контрактов: на десктопе показывает не больше пяти строк и
+   прокручивается, если их больше. Потолок в пять строк ставит инлайновым
+   max-height fitContracts (js/backends/clean-roads.js) — в CSS его не задать,
+   высота строки зависит от шрифта, масштаба браузера и переносов в ячейке.
+   Пока строк пять и меньше, max-height не ставится вовсе — высота по
+   содержимому. Итог в подвале сервер
+   считает по ВСЕМ строкам — с прокруткой они все достижимы, расхождения с
+   видимым нет (раньше лишние строки прятались классом .is-cut, и рядом с
+   итогом стояло «показано X из N»). */
+.cd-table-wrap--scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* Карточка контрактов высотой по содержимому (раньше была flex: 1 — забирала
+   весь остаток экрана): теперь в ней не больше пяти строк, и растянутая на
+   пол-экрана карточка оставляла бы пустоту между списком и строкой «Итого».
+   Свободное место остаётся под карточкой. Список адм. единиц, в отличие от
+   неё, прокручивается внутри своей карточки — без этого длинный справочник
+   округов растягивал бы страницу и утаскивал строку «Итого» далеко вниз. */
+.cd-panel--contracts { flex: 0 1 auto; min-height: 0; }
+.cd-panel--units .cd-table-wrap { max-height: 300px; overflow-y: auto; }
+.cd-panel--units thead th { position: sticky; top: 0; z-index: 1; background: var(--panel-bg); }
+/* «Итого» адм. единиц — в самой таблице (в отличие от контрактов, где подвал
+   вынесен из прокрутки отдельным блоком): у длинного списка округов он иначе
+   уезжает под нижний край карточки, и строка итога, которая должна сходиться
+   с видимыми, оказывается не видна вовсе. */
+.cd-panel--units .cd-total-row td { position: sticky; bottom: 0; z-index: 1;
+  background: var(--panel-bg); box-shadow: inset 0 1px 0 var(--border-strong); }
+.cd-panel--units .cd-total-row { border-top: none !important; }
+.cd-table-wrap--scroll thead th { position: sticky; top: 0; z-index: 1;
+  background: var(--panel-bg); box-shadow: inset 0 -1px 0 var(--border); }
+.cd-total-row { border-top: 1px solid var(--border-strong) !important; }
+.cd-total-row td { font-weight: 700; }
+
+.cd-au-table th.cd-th-group { text-align: center; padding-bottom: 4px;
+  font-size: 11px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); }
+.cd-au-table .cd-au__name, .cd-ct-table th { text-align: left; }
+.cd-au-table .cd-au__name { width: 40%; padding-right: 8px; vertical-align: bottom;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-au-table td.cd-mv { font-weight: 700; color: var(--accent); }
+.cd-au-table .cd-au__on { padding-left: 8px; font-weight: 700; }
+.cd-au-table tbody tr.is-clickable { cursor: pointer; }
+.cd-au-table tbody tr.is-clickable:hover { background: var(--bg-app); }
+.cd-au-table tbody tr.is-busy { opacity: .55; pointer-events: none; }
+
+/* Строки контрактов НЕ кликабельны (вести отсюда некуда — карточки
+   контракта во внешней карте нет): ни курсора, ни hover-подсветки. */
+.cd-ct-table td { padding-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-ct-table .cd-ct__num { width: 11%; text-align: left; font-weight: 700; }
+.cd-ct-table .cd-ct__org { width: 20%; text-align: left; }
+.cd-ct-table .cd-ct__units { width: 18%; text-align: left; }
+.cd-ct-table .cd-ct__work { width: 23%; text-align: left; }
+.cd-ct-table .cd-ct__end { width: 13%; text-align: left; }
+.cd-ct-table .cd-ct__sum { width: 15%; text-align: right; padding-right: 0; }
+.cd-badge-warn { display: inline-flex; padding: 2px 7px; border-radius: 7px;
+  background: var(--cd-danger-bg); color: var(--cd-danger); font-weight: 700; }
+
+/* Разворот урезанных списков — только мобильный (см. медиазапрос ниже):
+   на десктопе видны все строки сразу и разворачивать нечего. */
+.cd-more { display: none; }
+
+/* ------------------------------------------------------------ кнопки */
+.cd-btn { height: 36px; padding: 0 16px; border: 1px solid var(--border-strong);
   background: var(--panel-bg); border-radius: var(--radius-sm);
   font: 600 12.5px/1 inherit; color: var(--text); cursor: pointer; }
-.dash-btn:hover { border-color: var(--accent); color: var(--accent); }
-.dash-btn--primary { border-color: transparent; background: var(--accent); color: #fff; font-weight: 700; }
-.dash-btn--primary:hover { background: var(--accent-hover); color: #fff; }
-.dash-btn.is-busy { opacity: .5; pointer-events: none; }
+.cd-btn:hover { border-color: var(--accent); color: var(--accent); }
+.cd-btn--primary { border-color: transparent; background: var(--accent); color: #fff; font-weight: 700; }
+.cd-btn--primary:hover { background: #2148b8; color: #fff; }
+.cd-btn.is-busy { opacity: .5; pointer-events: none; }
 
-/* Карточка ошибки занимает экран целиком: прошлые (или демо-) цифры при
-   ошибке не подмешиваем — см. js/dashboard.js: errorHtml. */
-.dash-err { display: flex; align-items: flex-start; gap: 13px;
+/* -------------------------------------------------------- нет данных */
+.cd-empty { background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-soft);
+  padding: 26px 20px; text-align: center; }
+.cd-empty__ico { display: grid; place-items: center; width: 52px; height: 52px;
+  margin: 0 auto 12px; border-radius: 16px; background: var(--cd-accent-bg); color: var(--accent); }
+.cd-empty__ico svg { width: 24px; height: 24px; }
+.cd-empty h3 { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: var(--text); }
+.cd-empty p { margin: 0 auto 16px; max-width: 380px; font-size: 12.5px;
+  line-height: 1.55; color: var(--text-muted); }
+.cd-empty__acts { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+
+/* ----------------------------------------------------- ошибка загрузки */
+/* Занимает экран целиком: прошлые цифры при ошибке не подмешиваем (в макете
+   была строка «данные с последнего успешного обновления» — она писалась под
+   автообновление, от которого отказались). */
+.cd-err { display: flex; align-items: flex-start; gap: 13px;
   margin: var(--view-content-top) 16px 16px;
   background: var(--panel-bg); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow-soft); padding: 16px 17px; }
-.dash-err__ico { flex: none; display: grid; place-items: center; width: 38px; height: 38px;
-  border-radius: 11px; background: var(--dash-danger-bg); color: var(--dash-danger); }
-.dash-err__body { min-width: 0; flex: 1; }
-.dash-err__body h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; color: var(--text); }
-.dash-err__body p { margin: 0 0 12px; font-size: 12.5px; line-height: 1.55; color: var(--text-muted); }
-.dash-err__acts { display: flex; gap: 9px; flex-wrap: wrap; }
-.dash-err__acts .dash-btn { height: 34px; }
-.dash-err__detail { margin: 12px 0 0; padding: 10px 12px; max-height: 220px; overflow: auto;
+.cd-err__ico { flex: none; display: grid; place-items: center; width: 38px; height: 38px;
+  border-radius: 11px; background: var(--cd-danger-bg); color: var(--cd-danger); }
+.cd-err__body { min-width: 0; flex: 1; }
+.cd-err__body h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; color: var(--text); }
+.cd-err__body p { margin: 0 0 12px; font-size: 12.5px; line-height: 1.55; color: var(--text-muted); }
+.cd-err__acts { display: flex; gap: 9px; flex-wrap: wrap; }
+.cd-err__acts .cd-btn { height: 34px; }
+.cd-err__detail { margin: 12px 0 0; padding: 10px 12px; max-height: 220px; overflow: auto;
   background: var(--bg-app); border-radius: var(--radius-sm);
   font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
   color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
 
-.dash-skel { margin: var(--view-content-top) 16px 16px;
+/* ------------------------------------------------------------ скелетон */
+.cd-skel { margin: var(--view-content-top) 16px 16px;
   background: var(--panel-bg); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow-soft); padding: 13px 14px; }
-.dash-skel__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+.cd-skel__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px; margin-bottom: 12px; }
-.dash-skel__kpi { display: flex; align-items: center; gap: 11px; }
-.dash-skel__ico { flex: none; width: 38px; height: 38px; border-radius: 11px; background: var(--bg-app); }
-.dash-skel__lines { flex: 1; min-width: 0; }
-.dash-skel__l1 { display: block; height: 18px; width: 58%; border-radius: 5px;
+.cd-skel__kpi { display: flex; align-items: center; gap: 11px; }
+.cd-skel__ico { flex: none; width: 38px; height: 38px; border-radius: 11px; background: var(--bg-app); }
+.cd-skel__lines { flex: 1; min-width: 0; }
+.cd-skel__l1 { display: block; height: 18px; width: 58%; border-radius: 5px;
   background: var(--bg-app); margin-bottom: 6px; }
-.dash-skel__l2 { display: block; height: 10px; width: 78%; border-radius: 4px; background: #f4f6fa; }
-.dash-skel__bars { display: flex; flex-direction: column; gap: 9px; }
-.dash-skel__bars i { height: 12px; border-radius: 4px; background: var(--bg-app); }
-.dash-skel__bars i:nth-child(2) { width: 86%; background: #f4f6fa; }
-.dash-skel__bars i:nth-child(3) { width: 92%; }
-.dash-skel__note { margin-top: 13px; display: flex; align-items: center; gap: 9px;
+.cd-skel__l2 { display: block; height: 10px; width: 78%; border-radius: 4px; background: #f4f6fa; }
+.cd-skel__bars { display: flex; flex-direction: column; gap: 9px; }
+.cd-skel__bars i { height: 12px; border-radius: 4px; background: var(--bg-app); }
+.cd-skel__bars i:nth-child(2) { width: 86%; background: #f4f6fa; }
+.cd-skel__bars i:nth-child(3) { width: 92%; }
+.cd-skel__note { margin-top: 13px; display: flex; align-items: center; gap: 9px;
   font-size: 12px; color: var(--text-muted); }
-.dash-skel__spin { width: 14px; height: 14px; border-radius: 50%; flex: none;
-  border: 2.2px solid var(--dash-accent-bg); border-top-color: var(--accent);
-  animation: spin .8s linear infinite; }
+.cd-skel__spin { width: 14px; height: 14px; border-radius: 50%; flex: none;
+  border: 2.2px solid var(--cd-accent-bg); border-top-color: var(--accent);
+  animation: cd-spin .8s linear infinite; }
+@keyframes cd-spin { to { transform: rotate(360deg); } }
 
+/* ==================================================================== */
+/* 390px — артборд Mobile. Порядок секций тот же, меняются раскладка и   */
+/* объём: подрядчики целиком, адм. единицы и контракты — первые 3 с      */
+/* разворотом на месте. Разметка ОДНА И ТА ЖЕ: второй набор HTML в       */
+/* render() разошёлся бы с десктопным на первой же правке, поэтому       */
+/* таблицы перестраиваются в карточки правилами display/grid-areas, а    */
+/* подписи плиток берутся из data-l тех же ячеек.                        */
+/* ==================================================================== */
 @media (max-width: 720px) {
-  .dash-err, .dash-skel { margin: var(--view-content-top) 14px 16px; }
-  .dash-skel__row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cd-dash { padding: var(--view-content-top) 14px 16px; gap: 10px; }
+
+  .cd-flt { gap: 8px; padding: 9px 11px; }
+  /* Подпись «Период данных» на 390px лишняя — рядом сам период с иконкой
+     календаря, который и так читается как период. */
+  .cd-flt__label { display: none; }
+  /* Период занимает свободное место строки и не ужимается до неразборчивого
+     огрызка (иначе от «01.09 — 30.09.2026» остаётся «01»). */
+  .cd-chip--period { flex: 1 1 auto; min-width: 118px; justify-content: flex-start; overflow: hidden; }
+  /* От «Обновлено 12:40» остаётся только время: слово целиком не помещается в
+     ту же строку, а час обновления рядом с периодом читается и без него. */
+  .cd-flt__upd { font-size: 11.5px; flex: none; }
+  .cd-flt__upd-word { display: none; }
+
+  .cd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .cd-kpis .pt-kpi { align-items: flex-start; gap: 10px; padding: 11px 12px; }
+  .cd-kpis .pt-kpi__value { font-size: 22px; }
+  /* В два столбца на 390px подписи в одну строку не помещаются, а многоточие
+     («в парке подря…») хуже переноса — на десктопе, где ширины хватает,
+     многоточие остаётся. */
+  .cd-kpis .pt-kpi__label, .cd-kpis .cd-kpi__sub {
+    white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.3; }
+
+  .cd-mid { grid-template-columns: minmax(0, 1fr); }
+  /* На узком экране прокрутка идёт у всей страницы, а не внутри карточек:
+     вложенная область прокрутки на 390px почти нерабочая. */
+  /* max-height приходит инлайном от fitContracts — на узком экране он его сам
+     снимает, но правило ниже страхует переход сюда сужением окна. */
+  .cd-table-wrap--scroll { flex: none; overflow-y: visible; max-height: none !important; }
+  .cd-panel--units .cd-table-wrap { max-height: none; overflow-y: visible; }
+  /* Урезанием на 390px заведует не измерение, а .is-extra ниже: список режется
+     до трёх строк независимо от высоты экрана (артборд Mobile). */
+  .cd-table-wrap--scroll thead th, .cd-panel--units thead th { position: static; }
+  .cd-panel--contracts { flex: none; }
+
+  .cd-more { display: block; width: 100%; height: 44px; margin-top: 10px;
+    background: var(--panel-bg); border: 1px solid var(--border-strong);
+    border-radius: 11px; font: 600 12.5px/1 inherit; color: var(--text); cursor: pointer; }
+  .cd-more:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* --- адм. единицы: строка таблицы -> карточка с плитками --- */
+  .cd-au-table, .cd-au-table tbody, .cd-au-table tr, .cd-au-table td { display: block; }
+  .cd-au-table thead { display: none; }
+  .cd-au-table tbody tr { border: 1px solid var(--border) !important; border-radius: 11px;
+    padding: 10px 11px; margin-bottom: 8px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    grid-template-areas: "name on" "k1 k2" "t1 t2"; }
+  .cd-au-table tbody td { padding: 0; }
+  .cd-au-table tbody td:nth-child(1) { grid-area: name; font-size: 12.5px; font-weight: 700;
+    width: auto; text-align: left; align-self: baseline; }
+  .cd-au-table tbody td:nth-child(2) { grid-area: k1; }
+  .cd-au-table tbody td:nth-child(3) { grid-area: k2; }
+  .cd-au-table tbody td:nth-child(4) { grid-area: t1; }
+  .cd-au-table tbody td:nth-child(5) { grid-area: t2; }
+  .cd-au-table tbody td:nth-child(6) { grid-area: on; padding-left: 0;
+    text-align: right; font-size: 12px; color: var(--accent); align-self: baseline; }
+  .cd-au-table tbody td:nth-child(6)::after { content: ' на линии'; font-weight: 600; }
+  /* Плитки: подпись — из data-l той же ячейки (на десктопе подписи живут в
+     двухуровневой шапке, которая здесь скрыта). */
+  .cd-au-table tbody td:nth-child(n+2):nth-child(-n+5) {
+    background: var(--bg-app); border-radius: 8px; padding: 7px 9px;
+    text-align: left; font-size: 14px; font-weight: 700; }
+  .cd-au-table tbody td:nth-child(n+2):nth-child(-n+5)::before {
+    content: attr(data-l); display: block; font-size: 11px; font-weight: 400;
+    color: var(--text-muted); margin-bottom: 1px; }
+
+  /* --- контракты: строка -> карточка, колонки адм. единиц и видов работ
+         на 390px не показываем (см. артборд Mobile) --- */
+  .cd-ct-table, .cd-ct-table tbody, .cd-ct-table tr, .cd-ct-table td { display: block; }
+  .cd-ct-table thead { display: none; }
+  .cd-ct-table tbody tr { border: 1px solid var(--border) !important; border-radius: 11px;
+    padding: 10px 11px; margin-bottom: 8px;
+    display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
+    grid-template-areas: "num sum" "org org" "end end"; }
+  .cd-ct-table tbody td { padding: 0; width: auto; }
+  .cd-ct-table .cd-ct__num { grid-area: num; color: var(--accent); }
+  .cd-ct-table .cd-ct__sum { grid-area: sum; text-align: right; font-weight: 700; }
+  .cd-ct-table .cd-ct__sum::after { content: ' ₽'; }
+  .cd-ct-table .cd-ct__org { grid-area: org; margin-top: 2px; font-size: 12px; }
+  .cd-ct-table .cd-ct__end { grid-area: end; margin-top: 2px; font-size: 11.5px; color: var(--text-muted); }
+  .cd-ct-table .cd-ct__end::before { content: 'до '; }
+  .cd-ct-table .cd-ct__units, .cd-ct-table .cd-ct__work { display: none; }
+
+  /* --- урезание до первых 3 с разворотом на месте (кнопка .cd-more) --- */
+  .cd-panel:not(.is-expanded) .cd-table tbody tr.is-extra { display: none; }
+  .cd-panel.is-expanded .cd-table tbody tr.is-extra { display: grid; }
+
+  /* «Итого» адм. единиц — не карточка, а обычная строка итога под ними. */
+  .cd-au-table tbody tr.cd-total-row { display: flex; flex-wrap: wrap; gap: 4px 10px;
+    border: none !important; border-top: 1px solid var(--border-strong) !important;
+    border-radius: 0; padding: 9px 0 0; margin: 2px 0 0; }
+  .cd-au-table tbody tr.cd-total-row td { background: none; padding: 0;
+    font-size: 12px; font-weight: 700; color: var(--text); }
+  .cd-au-table tbody tr.cd-total-row td::before { content: attr(data-l) ': ';
+    display: inline; font-weight: 400; color: var(--text-muted); }
+  .cd-au-table tbody tr.cd-total-row td:nth-child(1) { flex-basis: 100%; color: var(--text-muted); }
+  .cd-au-table tbody tr.cd-total-row td:nth-child(6)::after { content: none; }
+
+  .cd-err, .cd-skel { margin: var(--view-content-top) 14px 16px; }
+  .cd-skel__row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

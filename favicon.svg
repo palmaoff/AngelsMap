@@ -1,4 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <path fill="#2b57d4" d="M12 1.5C7.86 1.5 4.5 4.86 4.5 9c0 5.7 7.5 13.5 7.5 13.5S19.5 14.7 19.5 9c0-4.14-3.36-7.5-7.5-7.5z"/>
-  <circle cx="12" cy="9" r="3.2" fill="#ffffff"/>
+  <circle cx="12" cy="9.2" r="4.6" fill="#ffffff"/>
+  <rect x="7.9" y="6.9" width="8.2" height="5" rx="1.4" fill="#2b57d4"/>
+  <rect x="8.7" y="7.7" width="2.6" height="1.9" rx="0.3" fill="#ffffff"/>
+  <rect x="12.7" y="7.7" width="2.6" height="1.9" rx="0.3" fill="#ffffff"/>
+  <circle cx="9.6" cy="11.9" r="0.95" fill="#1b2434"/>
+  <circle cx="14.4" cy="11.9" r="0.95" fill="#1b2434"/>
 </svg>
