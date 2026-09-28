@@ -1,0 +1,4 @@
+graphify-out/
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+CLAUDE.md

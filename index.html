@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Карта</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+  <!-- Библиотеки (vendored, работают offline / в закрытом контуре) -->
+  <link rel="stylesheet" href="lib/leaflet.css">
+  <!-- Leaflet.markercluster — обычные (не canvas-иконка) точечные слои, см.
+       js/map.js RealMarkerLayerHandle/ensureRealMarkerCluster -->
+  <link rel="stylesheet" href="lib/MarkerCluster.css">
+  <link rel="stylesheet" href="lib/MarkerCluster.Default.css">
+  <link rel="stylesheet" href="css/styles.css?v=67">
+</head>
+<body>
+  <!-- Статичная разметка — рисуется сразу вместе с первым кадром страницы,
+       ещё до DOMContentLoaded/выполнения любого JS (см. js/auth.js:
+       hideBootScreen), поэтому вместо пустого белого экрана на время логина/
+       MapApp.init() (сетевой /config, /layers и сборка панели слоёв) видно,
+       что приложение уже загружается. -->
+  <div class="boot-screen" id="bootScreen">
+    <div class="boot-screen__mark">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#2b57d4" d="M12 1.5C7.86 1.5 4.5 4.86 4.5 9c0 5.7 7.5 13.5 7.5 13.5S19.5 14.7 19.5 9c0-4.14-3.36-7.5-7.5-7.5z"/>
+        <circle cx="12" cy="9" r="3.2" fill="#ffffff"/>
+      </svg>
+    </div>
+    <div class="boot-screen__spinner"></div>
+    <div class="boot-screen__label">Загрузка карты…</div>
+  </div>
+
+  <div id="app">
+    <div id="viewMap" class="view view--map is-active">
+      <div id="map"></div>
+    </div>
+    <div id="viewDashboard" class="view view--dashboard"></div>
+    <div id="viewReports" class="view view--reports"></div>
+  </div>
+
+  <script src="lib/leaflet.js"></script>
+  <script src="lib/leaflet-heat.js"></script>
+  <script src="lib/leaflet_marker_slideto.js"></script>
+
+  <!-- Leaflet.markercluster — обычные точечные слои без canvas-иконки, см.
+       js/map.js RealMarkerLayerHandle/ensureRealMarkerCluster -->
+  <script src="lib/leaflet.markercluster.js"></script>
+
+  <!-- Векторные тайлы (Leaflet.VectorGrid + geojson-vt, bundled) — используется
+       только при MapConfig.perf.vectorTilesLines/vectorTilesPolygons=true
+       (см. js/map.js buildVectorGridGroup) -->
+  <script src="lib/Leaflet.VectorGrid.bundled.js"></script>
+  <script src="js/config.js?v=8"></script>
+
+  <!-- Общие SVG-примитивы графиков (dashboard.js + rich-report.js) — должен
+       грузиться раньше обоих потребителей, см. js/chart-kit.js шапку. -->
+  <script src="js/chart-kit.js?v=12"></script>
+
+  <script src="js/api.js?v=20"></script>
+  <script src="js/auth.js?v=5"></script>
+  <script src="js/settings-form.js?v=2"></script>
+
+  <!-- Бэкенд-плагин (window.BackendPlugin) — вся специфика конкретной 1С-базы
+       (baseUrl, иконки слоёв, дашборд/отчёты, команды карты), см. шапку
+       js/backends/_demo.js. Подключён ровно один плагин; новый проект —
+       копия _demo.js под своим id (см. CLAUDE.md, «Старт нового проекта»). -->
+
+  <!-- Демо без бэкенда: _demo-server.js — «сервер» в браузере (BackendPlugin.mockApi),
+       подключается только вместе с _demo.js и раньше него. В новом проекте
+       этот тег удаляется. -->
+  <script src="js/backends/_demo-server.js?v=2"></script>
+  <script src="js/backends/_demo.js?v=3"></script>
+
+  <script src="js/map.js?v=69"></script>
+  <script src="js/dashboard.js?v=16"></script>
+  <script src="js/rich-report.js?v=3"></script>
+
+  <!-- Выгрузка отчётов в XLSX/PDF (BackendPlugin.exportProfile/reportExporters
+       читаются лениво внутри вызова, см. js/export.js шапку — не зависит от
+       того, до или после backends/<id>.js подключён этот тег). Перед
+       reports.js: ReportsApp.renderHeader вызывает ReportExport.headerButtonsHtml()
+       при первой же отрисовке шапки предпросмотра. -->
+  <script src="js/export.js?v=3"></script>
+  <script src="js/reports.js?v=12"></script>
+
+  <script src="js/app-shell.js?v=5"></script>
+</body>
+</html>

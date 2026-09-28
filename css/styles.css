@@ -1,0 +1,1812 @@
+/* =====================================================================
+   Ангел · Карта — вынесенный картографический модуль
+   Дизайн-система. Минимализм, синий акцент в тонах 1С.
+   ===================================================================== */
+
+:root {
+  /* Акцент (синий 1С) */
+  --accent:        #2b57d4;
+  --accent-hover:  #2148b8;
+  --accent-soft:   rgba(43, 87, 212, 0.10);
+  --accent-softer: rgba(43, 87, 212, 0.05);
+
+  /* Поверхности */
+  --bg-app:        #eef1f6;
+  --panel-bg:      #ffffff;
+  --panel-bg-blur: rgba(255, 255, 255, 0.86);
+
+  /* Текст */
+  --text:          #1b2434;
+  --text-muted:    #6a7688;
+  --text-faint:    #97a1b2;
+
+  /* Границы / разделители */
+  --border:        #e4e8f0;
+  --border-strong: #d3d9e4;
+
+  /* Тени */
+  --shadow-panel:  0 6px 28px rgba(27, 36, 52, 0.14);
+  --shadow-soft:   0 2px 8px rgba(27, 36, 52, 0.08);
+
+  /* Метрики */
+  --radius:        14px;
+  --radius-sm:     9px;
+  --panel-w:       304px;
+  --gap:           14px;
+  --header-h:      52px;
+  /* Отступ сверху у контента Дашборда/Отчётов — оставляет явный воздух под
+     плавающим .view-switch (он не резервирует место сам, см. комментарий
+     там), чтобы контент страницы не подпирал его вплотную. */
+  --view-content-top: 96px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+          Arial, "PT Sans", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#app { position: fixed; inset: 0; }
+
+/* --------------------------------------------------------------------- Map */
+#map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--bg-app);
+}
+
+/* Ч/б подложка под тепловой слой (аналог grayscalegis в 1С) */
+.leaflet-tile-pane { transition: filter 0.4s ease; }
+
+/* Тепловой слой (Leaflet.heat) рисует свой canvas в overlayPane поверх
+   canvas-рендерера остальных слоёв (маркеры автобусов/остановок, линии
+   маршрутов/треков — см. map.js: renderer: L.canvas(...)) и, в отличие от него,
+   не выключает себе pointer-events — поэтому canvas тепловой карты перехватывал
+   клики по всей площади карты (не только там, где реально что-то нарисовано —
+   canvas ловит события мышью по всему bounding box, а не по непрозрачным
+   пикселям), не давая выбрать объект под ним. У теплового слоя нет собственных
+   обработчиков клика, поэтому просто делаем его насквозь кликабельным. */
+.leaflet-heatmap-layer { pointer-events: none; }
+
+/* На время перетаскивания карты (см. map.js: dragstart/moveend) маркеры и
+   canvas-векторы не должны реагировать на mouseover — иначе объекты,
+   проезжающие под неподвижным курсором во время панорамирования, ошибочно
+   триггерят подсказки/hover, как будто на них навели.
+   .leaflet-marker-icon отключаем отдельным явным правилом: leaflet.css сам
+   возвращает интерактивным маркерам pointer-events:auto прямо на элементе
+   (.leaflet-marker-icon.leaflet-interactive) — унаследованный от pane
+   pointer-events:none такое прямое правило не перебивает. */
+#map.is-panning .leaflet-marker-pane,
+#map.is-panning .leaflet-overlay-pane canvas {
+  pointer-events: none;
+}
+#map.is-panning .leaflet-marker-icon {
+  pointer-events: none !important;
+}
+#map.is-grayscale .leaflet-tile-pane { filter: grayscale(1) contrast(0.96) brightness(1.02); }
+
+/* Аккуратный вид контролов Leaflet под общий стиль */
+.leaflet-control-zoom a {
+  border: none !important;
+  color: var(--text) !important;
+  font-weight: 500;
+}
+.leaflet-bar {
+  border: none !important;
+  box-shadow: var(--shadow-soft) !important;
+  border-radius: var(--radius-sm) !important;
+  overflow: hidden;
+}
+.leaflet-touch .leaflet-bar a:first-child { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.leaflet-touch .leaflet-bar a:last-child  { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+
+/* ----------------------------------------------------------------- Panels */
+.panel {
+  position: absolute;
+  top: var(--gap);
+  bottom: var(--gap);
+  width: var(--panel-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg-blur);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  /* Выше .view-switch (1500) — на маленьких экранах панель растягивается почти
+     во всю высоту и перекрывает верхний переключатель экранов; панель должна
+     быть видна поверх него целиком, а не уезжать под него верхним краем. */
+  z-index: 1600;
+  transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1),
+              opacity 0.22s ease;
+  will-change: transform;
+  overflow: hidden;
+}
+
+.panel--left  { left: var(--gap); }
+.panel--right { right: var(--gap); }
+
+/* Свёрнутое состояние: панель уезжает за край экрана */
+.panel--left.is-collapsed  { transform: translateX(calc(-1 * (var(--panel-w) + var(--gap) + 6px))); opacity: 0; pointer-events: none; }
+.panel--right.is-collapsed { transform: translateX(calc(var(--panel-w) + var(--gap) + 6px)); opacity: 0; pointer-events: none; }
+
+/* Заголовок панели */
+.panel__header {
+  height: var(--header-h);
+  flex: 0 0 var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.panel__title {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.panel__title small {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-faint);
+  letter-spacing: 0;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.icon-btn svg { width: 18px; height: 18px; display: block; }
+
+.panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Тонкий скроллбар */
+.panel__body::-webkit-scrollbar { width: 8px; }
+.panel__body::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+.panel__body::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+/* Подвал панели — сейчас используется только панелью «Слои карты» под плашку
+   текущего пользователя (см. .auth-badge ниже): пусто, если её содержимое ещё
+   не смонтировано (auth.js: renderUserBadge), поэтому не должен ничего
+   резервировать сам по себе. */
+.panel__footer:empty { display: none; }
+.panel__footer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  padding: 10px 8px 10px 16px;
+}
+
+/* ------------------------------------------------- Collapsed reopen tabs */
+.reveal-tab {
+  position: absolute;
+  top: var(--gap);
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-panel);
+  color: var(--accent);
+  cursor: pointer;
+  z-index: 1601; /* тот же принцип, что у .panel выше — над .view-switch */
+  opacity: 0;
+  transform: scale(0.85);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s;
+}
+.reveal-tab.is-visible { opacity: 1; transform: scale(1); pointer-events: auto; }
+.reveal-tab:hover { background: var(--accent-soft); }
+.reveal-tab svg { width: 20px; height: 20px; }
+.reveal-tab--left  { left: var(--gap); }
+.reveal-tab--right { right: var(--gap); }
+.reveal-tab__badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--panel-bg);
+}
+
+/* --------------------------------------------------------- Layer list */
+.layer-search {
+  padding: 12px 14px 6px;
+}
+.layer-search input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.layer-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.layer-group__label {
+  padding: 12px 16px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.13s;
+}
+.layer-item:hover { background: var(--accent-softer); }
+
+.layer-item__swatch {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+}
+.layer-item__swatch--line { height: 4px; border-radius: 2px; }
+.layer-item__swatch--heat {
+  background: linear-gradient(90deg, #2b83ba, #abdda4, #fdae61, #d7191c) !important;
+}
+.layer-item__swatch--polygon {
+  background: none !important;
+  border: 2px solid currentColor;
+  box-shadow: none;
+}
+
+/* Легенда per-объектной раскраски слоя (Треки по ГРЗ, см. renderLayerLegend
+   в js/map.js). Отдельный блок ПОД .layer-item, а не внутри неё: .layer-item —
+   однострочный flex, клик по которому переключает сам слой.
+
+   Сетка, а не flex-wrap: подписи (ГРЗ) разной длины, и при переносе строк
+   квадратики соседних колонок съезжали друг относительно друга — колонка
+   фиксированной ширины ставит их строго друг под другом. auto-fill, а не
+   жёстко три колонки: в панели 304px их помещается три, на узком экране
+   (--panel-w: min(78vw, 320px)) набор сам сворачивается в две. 70px — минимум,
+   при котором в доступные (304 - 37 - 14 - 2*8)/3 ≈ 76px влезает и самая
+   длинная встречающаяся подпись (9-значный номер) вместе с квадратиком. */
+.layer-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 4px 8px;
+  padding: 0 14px 9px 37px;   /* 37px — вровень с .layer-item__name (14 + 12 + 11) */
+}
+.layer-legend[hidden] { display: none; }
+.layer-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+/* Подпись урезается многоточием, а не вылезает в соседнюю колонку: ширина
+   колонки рассчитана на обычный ГРЗ, а в справочнике попадаются и длиннее. */
+.layer-legend__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.layer-legend__swatch {
+  width: 10px;
+  height: 4px;
+  flex: 0 0 10px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+}
+
+.layer-item__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.layer-item__count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  background: var(--bg-app);
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+/* Переключатель */
+.toggle {
+  --w: 34px; --h: 20px;
+  position: relative;
+  width: var(--w);
+  height: var(--h);
+  flex: 0 0 var(--w);
+  border-radius: var(--h);
+  background: var(--border-strong);
+  transition: background 0.2s;
+}
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: calc(var(--h) - 4px);
+  height: calc(var(--h) - 4px);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  transition: transform 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+.layer-item.is-on .toggle { background: var(--accent); }
+.layer-item.is-on .toggle::after { transform: translateX(calc(var(--w) - var(--h))); }
+
+.layer-error {
+  padding: 20px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.layer-item__settings {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.layer-item__settings:hover { background: var(--accent-soft); color: var(--accent); }
+.layer-item__settings svg { width: 15px; height: 15px; display: block; }
+
+/* Индикация загрузки/обновления — is-loading (холодная загрузка, кэша ещё
+   нет вообще) и is-refreshing (кэш уже показан на карте, идёт фоновая сверка
+   актуальности с сервером, см. toggleLayer() в js/map.js). Раньше это были
+   два разных состояния пилюли: пустая+спиннер при холодной загрузке, но
+   число+пульсирующий фон при фоновой сверке (кэш ведь уже есть). Убрано —
+   пока актуальных данных с сервера нет, пилюля всегда пустая и со спиннером,
+   независимо от того, есть ли уже кэш и показан ли он на карте: цифра —
+   это обещание "точно актуально", а во время сверки это неправда, даже если
+   число совпадает с тем, что вернул сервер в итоге. Сам слой на карте кэш
+   при этом всё равно показывает сразу (см. toggleLayer) — decoupled: что
+   нарисовано на карте и что написано в пилюле, теперь независимые вещи.
+   Из-за этого никакого "пульса по цвету" (был — background/color в акцентный
+   синий) больше не нужно: пилюля либо пустая+крутится, либо статичное число
+   без анимации, третьего состояния (число + анимация) не бывает. */
+.layer-item.is-loading .layer-item__count:empty::before,
+.layer-item.is-refreshing .layer-item__count:empty::before {
+  content: "";
+  display: inline-block;
+  width: 8px; height: 8px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --------------------------------------------------- Detail panel (left) */
+.detail-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 30px;
+  text-align: center;
+  color: var(--text-faint);
+}
+.detail-empty svg { width: 40px; height: 40px; opacity: 0.5; }
+.detail-empty p { margin: 0; font-size: 13px; line-height: 1.5; }
+
+.detail { padding: 4px 0 16px; }
+
+.detail__hero {
+  display: block;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.detail__type {
+  display: block;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.detail__name {
+  display: block;
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.4;
+  /* полное наименование без обрезки/многоточия — должно быть удобно выделить и скопировать */
+  white-space: normal;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+}
+
+.detail__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 16px 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.detail__status .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.detail__status--ok   { background: rgba(27,179,151,0.12);  color: #0f9b82; }
+.detail__status--warn { background: rgba(240,160,20,0.14);  color: #c47f00; }
+.detail__status--err  { background: rgba(215,25,28,0.12);   color: #cf3438; }
+
+.detail__rows { padding: 8px 0; }
+.detail__row {
+  display: flex;
+  gap: 14px;
+  padding: 8px 16px;
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+}
+.detail__row:first-child { border-top: none; }
+.detail__row dt { flex: 0 0 42%; color: var(--text-muted); }
+.detail__row dd { margin: 0; flex: 1; font-weight: 550; text-align: right; }
+
+.detail__section-title {
+  padding: 14px 16px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Содержимое приходит готовым HTML-фрагментом с сервера (АнгелКартографияВнешнееAPI.
+   ПолучитьДетали, поле html) — переиспользует те же классы .detail__row/.detail__rows/
+   .detail__section-title/.detail__status, плюс таблицы (почасовая статистика по
+   остановкам, участки трека) стилизуются здесь. */
+.detail__html table {
+  width: calc(100% - 32px);
+  margin: 4px 16px 14px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.detail__html th, .detail__html td {
+  padding: 7px 9px;
+  text-align: center;
+}
+.detail__html thead th {
+  background: var(--accent-softer);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.detail__html tbody td { border-top: 1px solid var(--border); }
+.detail__html tbody tr:first-child td { border-top: none; }
+.detail__html tbody tr:nth-child(even) { background: var(--accent-softer); }
+.detail__html td:first-child, .detail__html th:first-child { text-align: left; }
+
+/* Сворачиваемые блоки в детальной панели (напр. «Маршруты», «По часам» у остановки) —
+   контракт с сервером: только этот класс, см. АнгелКартографияВнешнееAPI.HTMLДляОстановки. */
+.detail__fold { border-top: 1px solid var(--border); }
+.detail__fold summary {
+  cursor: pointer;
+  padding: 14px 16px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.detail__fold summary:hover { color: var(--accent); }
+.detail__fold[open] summary { color: var(--accent); }
+
+.detail__video {
+  margin: 4px 16px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #000;
+  box-shadow: var(--shadow-soft);
+}
+.detail__video video { display: block; width: 100%; }
+
+/* Живут в .panel__footer панели «Подробно» (id="detailActions", см. map.js:
+   buildChrome/renderDetailActions), а не в прокручиваемом теле панели — тот же
+   приём, что и у .auth-badge в подвале панели «Слои карты». Свой модификатор
+   .detail__footer выравнивает отступы .panel__footer (асимметричные — под
+   узкую плашку логина) под пару полноширинных кнопок. */
+.detail__footer { padding: 10px 16px; }
+.detail__actions {
+  display: flex;
+  gap: 8px;
+}
+.btn {
+  flex: 1;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-softer); }
+.btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+.btn:disabled, .btn:disabled:hover {
+  opacity: 0.35;
+  cursor: default;
+  border-color: var(--border);
+  color: var(--text);
+  background: #fff;
+}
+
+/* Воспроизведение трека — панель "Подробно" у слоя "Треки" (см. map.js:
+   renderPlaybackBar/setPlaybackUI). Кнопки скорости компактнее, чем в
+   .detail__actions (не тянутся на всю ширину) — их несколько в один ряд. */
+.detail__playback {
+  display: flex;
+  gap: 6px;
+  padding: 4px 16px 12px;
+}
+.detail__playback .btn.speed-btn { flex: 0 1 auto; padding: 0 12px; }
+.detail__playback .btn--stop { flex: 1; }
+.detail__playback.is-playing .speed-btn { opacity: 0.35; cursor: default; }
+.btn--stop:not(:disabled) { border-color: #cf3438; color: #cf3438; }
+.btn--stop:not(:disabled):hover { background: rgba(215,25,28,0.08); border-color: #cf3438; color: #cf3438; }
+
+/* ------------------------------------------------------------- Settings modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 26, 38, 0.38);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.modal-overlay.is-open { opacity: 1; pointer-events: auto; }
+
+.modal {
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  transform: translateY(10px) scale(0.98);
+  transition: transform 0.18s ease, width 0.18s ease;
+}
+/* Слои с большим числом перенесённых нативных фильтров (ДТП/Дислокации/УчасткиДороги/...,
+   см. АнгелКартографияВнешнееAPI: ПолучитьНастройкиСлоя) не помещаются в одну колонку —
+   SettingsForm.openSettings добавляет этот класс на #settingsModal, когда
+   descriptor.wide=true (см. js/settings-form.js). Сама модалка остаётся тем же
+   компонентом, ширина — единственное отличие. */
+.modal--wide { width: min(880px, calc(100vw - 32px)); }
+.modal-overlay.is-open .modal { transform: translateY(0) scale(1); }
+
+.modal__header {
+  flex: 0 0 var(--header-h);
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+.modal__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0 8px;
+}
+.modal__body::-webkit-scrollbar { width: 8px; }
+.modal__body::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+.modal__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.modal__error { flex: 1; min-width: 0; font-size: 12px; color: #cf3438; }
+.modal__footer .btn { flex: 0 0 auto; padding: 0 18px; }
+
+/* Форма настроек слоя — разметку (какие поля есть у слоя) отдаёт сервер
+   (см. map.js: openLayerSettings), здесь только generic-стили под любые
+   поля любого слоя: подпись + один инпут/селект на строку, чекбокс — в ряд. */
+.settings-form__row {
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+}
+.settings-form__row:first-child { border-top: none; }
+.settings-form__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.settings-form__row--checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settings-form__row--checkbox .settings-form__label { margin-bottom: 0; }
+.settings-form input[type="text"],
+.settings-form input[type="number"],
+.settings-form input[type="date"],
+.settings-form input[type="datetime-local"],
+.settings-form input[type="time"],
+.settings-form select {
+  width: 100%;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+/* select[multiple] сам больше не показывается — см. map.js: enhanceMultiSelects
+   (прячет его и рисует рядом .settings-form__checklist). Остаётся в DOM только
+   как источник истины для collectSettingsValues() (selectedOptions). */
+.settings-form select[multiple] { display: none; }
+.settings-form input:focus, .settings-form select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.settings-form input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+.settings-form input[type="checkbox"]:hover { border-color: var(--accent); }
+.settings-form input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.settings-form input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.settings-form input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Список с чекбоксами вместо нативного select[multiple] (см. map.js:
+   enhanceMultiSelects) — тот же скролл-контейнер, что был у select[multiple]
+   раньше (max-height вместо min-height: список не должен растягивать модалку
+   на большом количестве вариантов). */
+.settings-form__checklist {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+}
+.settings-form__checklist::-webkit-scrollbar { width: 8px; }
+.settings-form__checklist::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+.settings-form__check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+}
+.settings-form__check-row:hover { background: var(--accent-softer); }
+.settings-form__hint {
+  padding: 0 18px 10px;
+  margin-top: -4px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+/* Двухколоночная раскладка формы настроек — для слоёв с большим числом перенесённых
+   нативных фильтров (см. .modal--wide выше и АнгелКартографияВнешнееAPI.РядЗаголовокРаздела).
+   Сервер помечает форму классом settings-form--grid, когда полей достаточно много, чтобы
+   одна колонка растягивала модалку по высоте без необходимости — сама генерика полей
+   (collectSettingsValues/applySettingsDependencies) не меняется, только раскладка строк. */
+.settings-form--grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+}
+.settings-form--grid .settings-form__row { border-top: none; border-left: 1px solid var(--border); }
+.settings-form--grid .settings-form__row:nth-child(2n+1) { border-left: none; }
+/* Строка на всю ширину модалки внутри settings-form--grid — для чек-листов (реально
+   нужна высота под список), заголовков разделов и текстовых полей с длинным значением.
+   Сервер добавляет этот класс через РядЧекбокс/РядТекст/... (параметр Широкая) или
+   отдельно у РядЗаголовокРаздела. */
+.settings-form__row--wide { grid-column: 1 / -1; border-left: none !important; }
+@media (max-width: 640px) {
+  .settings-form--grid { grid-template-columns: 1fr; }
+  .settings-form--grid .settings-form__row { border-left: none; border-top: 1px solid var(--border); }
+  .settings-form--grid .settings-form__row:first-child { border-top: none; }
+}
+
+/* Заголовок логической группы полей внутри формы настроек (например, "Участники",
+   "Местоположение" — см. РядЗаголовокРаздела) — всегда на всю ширину, даже в
+   settings-form--grid, слегка выделен фоном, чтобы отделять группы визуально в
+   длинной форме на много десятков полей (ДТП/Дислокации/УчасткиДороги). */
+.settings-form__section-title {
+  grid-column: 1 / -1;
+  padding: 9px 18px;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--accent-softer);
+  border-top: 1px solid var(--border);
+}
+.settings-form__row:first-child + .settings-form__section-title,
+.settings-form__section-title:first-child { border-top: none; }
+
+/* Строка поиска над чек-листом (см. map.js: enhanceMultiSelects) — появляется только
+   когда вариантов много (порог задаёт клиент, см. enhanceMultiSelects), чтобы длинные
+   перенесённые справочники (виды нарушений, недостатки УДС и т.п.) оставались usable
+   без полноценного 1С-подбора. */
+.settings-form__checklist-search {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: #fff;
+}
+.settings-form__checklist-search:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.settings-form__check-row.is-hidden { display: none; }
+
+/* ------------------------------------------------------------- Boot screen */
+/* Первый кадр страницы (см. index.html) — заполняет паузу до появления либо
+   .auth-overlay (мгновенно), либо готовой карты (MapApp.init() — /config,
+   /layers, сборка панели слоёв, см. js/auth.js: hideBootScreen), вместо
+   пустого фона #app/#map. z-index выше .auth-overlay (3000): при переходе к
+   логину экран не убирается мгновенно, а гаснет (is-hidden) поверх уже
+   отрисованной auth-card, получается кросс-фейд, а не резкая смена кадра. */
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--bg-app);
+  transition: opacity 0.35s ease;
+}
+.boot-screen.is-hidden { opacity: 0; pointer-events: none; }
+
+.boot-screen__mark {
+  width: 52px;
+  height: 52px;
+  animation: boot-pulse 1.6s ease-in-out infinite;
+}
+.boot-screen__mark svg { width: 100%; height: 100%; }
+
+@keyframes boot-pulse {
+  0%, 100% { transform: scale(1);     opacity: 1;    }
+  50%      { transform: scale(1.08);  opacity: 0.72; }
+}
+
+.boot-screen__spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.boot-screen__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: .2px;
+}
+
+/* ------------------------------------------------------------- Auth screen */
+/* Полноэкранный логин перед картой (см. js/auth.js) — MapApp.init() не
+   вызывается, пока сессия не подтверждена, поэтому оверлей рисуется поверх
+   пустого #app без полупрозрачности, как у .modal-overlay. */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-app);
+}
+.auth-card {
+  width: min(340px, calc(100vw - 32px));
+  padding: 28px 26px 24px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+}
+.auth-card__title { font-size: 17px; font-weight: 700; }
+.auth-card__subtitle { margin: 4px 0 20px; font-size: 12.5px; color: var(--text-muted); }
+.auth-field { display: block; margin-bottom: 14px; }
+.auth-field span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.auth-field input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.auth-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.auth-error { min-height: 16px; margin: -4px 0 12px; font-size: 12px; color: #cf3438; }
+.auth-submit { width: 100%; height: 40px; }
+
+/* Плашка текущего пользователя + выход — смонтирована внутри
+   .panel__footer панели «Слои карты» (см. auth.js: renderUserBadge), поэтому
+   собственного фона/тени/позиционирования не имеет — сворачивается вместе
+   с панелью как её обычное содержимое. */
+.auth-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+  font-size: 12.5px;
+}
+.auth-badge__login {
+  color: var(--text-muted);
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-badge__logout {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid #cf3438;
+  border-radius: 999px;
+  background: #fff;
+  color: #cf3438;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.auth-badge__logout:hover { background: rgba(215,25,28,0.08); border-color: #cf3438; color: #cf3438; }
+
+/* ------------------------------------------------------- Нижняя панель инструментов */
+/* Единая строка по центру снизу: масштаб — переключатель подложки — линейка.
+   Один общий контейнер позиционируется абсолютно по центру, три группы внутри —
+   обычные flex-элементы (раньше .basemap-switch сам был "position:absolute;
+   left:50%", из-за чего второй такой же элемент лёг бы точно поверх него —
+   поэтому масштаб/линейку нельзя было просто добавить рядом тем же приёмом). */
+.map-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: var(--gap);
+  transform: translateX(-50%);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.basemap-switch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 20px;
+  background: var(--panel-bg-blur);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  pointer-events: auto;
+}
+.basemap-switch__btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.basemap-switch__btn:hover { color: var(--text); }
+.basemap-switch__btn.is-active { background: var(--accent); color: #fff; }
+
+/* Масштаб — тот же "пилюльный" стиль, что и переключатель подложки, вместо
+   стандартного квадратного leaflet-control-zoom в углу карты (см. map.js:
+   init — L.control.zoom больше не используется). */
+.zoom-group {
+  display: flex;
+  padding: 3px;
+  border-radius: 20px;
+  background: var(--panel-bg-blur);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+.zoom-group__btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  border-radius: 16px;
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.zoom-group__btn:hover { background: var(--accent-soft); color: var(--accent); }
+.zoom-group__btn:disabled { opacity: 0.35; cursor: default; background: none; color: var(--text-muted); }
+
+.ruler-btn {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel-bg-blur);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-soft);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.ruler-btn:hover { color: var(--accent); }
+.ruler-btn.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ruler-btn svg { width: 18px; height: 18px; display: block; }
+
+/* Подсказка с бегущим расстоянием у линейки — тот же .map-tip, чуть плотнее. */
+.leaflet-tooltip.ruler-tip { font-weight: 600; white-space: nowrap; }
+
+/* --------------------------------------------------------- Marker icons */
+/* Кросс-слойный кластер (2+ объектов в одной ячейке, см. js/map.js:
+   PointClusterManager/buildClusterPieHtml) — байт-в-байт скопировано из
+   нативной карты АА-проекта (src/CommonTemplates/Clusters_Ruler_css/Ext/
+   Template.txt, использует те же классы .customCluster/.customChart/.unit/
+   .text — см. её собственный this.MarkerGroup.iconCreateFunction в
+   CommonTemplates/Map_js), а не переизобретено — включая то, что .text не
+   красит цифру в цвет ринга (наследует обычный цвет текста страницы, как в
+   оригинале). */
+.customCluster {
+  width: 50px;
+  height: 50px;
+  margin: 0;
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+}
+.customCluster .text {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: 35px;
+  height: 35px;
+  text-align: center;
+  line-height: 35px;
+  font-weight: bold;
+  border-radius: 50%;
+  background: #fff;
+}
+.customChart {
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+.unit {
+  fill: none;
+  stroke-width: 15;
+  animation-duration: 0.5s;
+  transition-property: all;
+  transition-duration: 0.5s;
+}
+.leaflet-tooltip.map-tip {
+  border: none;
+  box-shadow: var(--shadow-soft);
+  border-radius: 8px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ Views */
+/* Карта / Дашборд / Отчёты — три полноэкранных контейнера-"экрана" внутри
+   #app (см. app-shell.js). Каждый — тот же inset:0, что раньше был только у
+   #map, поэтому у скрытого экрана (Карта, пока открыт Дашборд/Отчёты) все
+   его панели/тулбар остаются в DOM и не теряют состояние — просто display:none
+   у всего контейнера разом. */
+.view { position: absolute; inset: 0; }
+.view:not(.is-active) { display: none; }
+.view--dashboard,
+.view--reports { overflow-y: auto; background: var(--bg-app); }
+
+/* ------------------------------------------------------- Переключатель экранов */
+/* Плавающий блок по центру сверху — та же "пилюльная" конструкция и тот же
+   приём позиционирования (position:absolute; left:50%; translateX(-50%)),
+   что и .map-toolbar снизу (см. комментарий там): самостоятельный элемент
+   шириной в свой контент, а не сплошная строка на всю ширину — чтобы не
+   отбирать высоту у карты/дашборда/отчётов под собой. Живёт на уровне #app,
+   рядом с .view-ами, а не внутри одного из них — виден на всех трёх экранах.
+   z-index — выше нижнего тулбара (900), но ниже панелей и ярлыков-раскрывашек
+   (1600/1601 — см. .panel/.reveal-tab выше: на маленьких экранах открытая
+   панель должна быть видна целиком поверх этого переключателя, а не частично
+   под ним) и ниже модалки настроек и экрана логина (2000/3000), которые
+   должны перекрывать его. */
+.view-switch {
+  position: absolute;
+  left: 50%;
+  top: var(--gap);
+  transform: translateX(-50%);
+  z-index: 1500;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 20px;
+  background: var(--panel-bg-blur);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+.view-switch__btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.view-switch__btn:hover { color: var(--text); }
+.view-switch__btn.is-active { background: var(--accent); color: #fff; }
+
+/* ---------------------------------------------------------------- Отчёты */
+.reports { display: flex; height: 100%; position: relative; }
+.reports__list {
+  flex: 0 0 300px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  transition: flex-basis 0.24s cubic-bezier(0.22, 0.61, 0.36, 1),
+              opacity 0.18s ease, border-color 0.24s ease;
+  /* Постоянно, не только во время .reports__list--sliding ниже — держит
+     элемент на одном и том же композитном GPU-слое всегда, а не
+     создаёт/уничтожает его на каждый старт/конец анимации. Раньше
+     will-change стоял только на .reports__list--sliding и снимался по
+     transitionend вместе с самим классом; браузер демоутит такой слой
+     обратно в обычный рендеринг не сразу, а спустя ~секунду — и при этой
+     демоуте иногда чуть съезжает субпиксельное выравнивание соседних
+     элементов (весь .reports__preview на 1-2px) — то самое отложенное
+     "доезжание" после уже законченной анимации. */
+  will-change: transform;
+}
+/* Сворачивание списка отчётов — тот же приём (панель + reveal-таб), что и у
+   панелей «Слои»/«Подробно» на экране карты (см. js/map.js: wireCollapse):
+   .is-collapsed ниже — состояние "в покое" (флекс-геометрия при статичном,
+   не анимирующемся списке); сама анимация сворачивания/разворачивания
+   решена отдельно, через .reports__list--sliding ниже — см. подробный
+   разбор там и в js/reports.js: slidePanel. Фактический контент списка
+   живёт в .reports__list-inner с фиксированной шириной (см. ниже), поэтому
+   при сворачивании текст внутри карточек отчётов не адаптируется под
+   уменьшающуюся ширину (перенос строк/сжатие), а просто обрезается через
+   overflow-x:hidden. */
+.reports__list.is-collapsed {
+  flex-basis: 0;
+  opacity: 0;
+  overflow: hidden;
+  border-right-color: transparent;
+  pointer-events: none;
+}
+/* Сама анимация сворачивания/разворачивания, в отличие от .is-collapsed
+   выше (только состояние "в покое"), идёт не через flex-basis — см.
+   js/reports.js: slidePanel за подробным разбором почему. Коротко: пока
+   активен этот класс, список временно выходит из flex-потока и едет только
+   transform'ом (композитинг, независимо от объёма открытого отчёта) — тот
+   же приём, что у .panel--left/--right на экране карты (см. выше), только
+   временный: по окончании анимации список возвращается в обычный
+   flex-поток (.is-collapsed выше или его отсутствие). */
+.reports__list--sliding {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  transition: transform 0.24s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.18s ease;
+}
+.reports__list--sliding.reports__list--off {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+/* Распорка, занимающая место списка в потоке, пока он едет transform'ом вне
+   потока (.reports__list--sliding выше). Создаётся и удаляется из
+   js/reports.js: slidePanel, ширина задаётся инлайном — ровно та, что панель
+   занимала в потоке ДО клика, чтобы .reports__preview (а с ним и таблица
+   отчёта) за всю анимацию не пересчитывался ни разу; см. подробный разбор
+   в slidePanel. Ширина только инлайновая, высота не задаётся: в мобильной
+   раскладке (.reports становится column, см. медиазапрос внизу файла) это
+   даёт нулевую высоту, т.е. распорка там ни на что не влияет — поведение
+   остаётся прежним. */
+.reports__list-spacer { flex: 0 0 auto; }
+/* Фиксированная ширина = обычная (несвёрнутая) ширина .reports__list, чтобы
+   заголовок и карточки отчётов всегда рассчитывали перенос текста относительно
+   одной и той же ширины, независимо от текущей анимируемой ширины родителя. */
+.reports__list-inner {
+  width: 300px;
+  padding: var(--view-content-top) var(--gap) var(--gap);
+}
+.reports__list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: var(--gap);
+}
+.reports__list-title { font-size: 20px; font-weight: 700; color: var(--text); padding-left: 4px; }
+/* Ярлык повторного разворачивания — переиспользует внешний вид .reveal-tab
+   с экрана карты (см. styles выше) и его штатный top:var(--gap) без
+   переопределения: тот же уровень, что и .view-switch наверху экрана
+   (тоже top:var(--gap), но по центру, так что по горизонтали не пересекаются).
+   Пробовали посадить его ниже, вровень с началом контента (--view-content-top) —
+   ровно на высоте названия отчёта в .reports__preview, тэг перекрывал текст.
+   На верхнем уровне тулбара он свободен от контента при любом состоянии
+   списка. */
+.report-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 10px 8px 10px 12px;
+  margin-bottom: 4px;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.report-item:hover { background: var(--accent-softer); }
+.report-item.is-active { background: var(--accent-soft); border-color: var(--accent); }
+.report-item__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.report-item__name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.report-item__meta { font-size: 11.5px; color: var(--text-muted); }
+/* Тот же вид, что у .layer-item__settings (см. панель слоёв) — своя шестерёнка
+   на отчёт, открывает ту же общую модалку настроек (см. js/settings-form.js). */
+.report-item__settings {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.report-item__settings:hover { background: var(--accent-soft); color: var(--accent); }
+.report-item__settings svg { width: 15px; height: 15px; display: block; }
+
+/* flex-column + overflow:hidden (а не overflow-y:auto на всей панели) —
+   специально, чтобы прокручивалась не вся панель, а только .report-table-wrap
+   (flex:1 ниже): тогда его собственный горизонтальный скроллбар всегда
+   закреплён у нижнего края экрана, а не «утоплен» под конец длинной таблицы,
+   куда раньше приходилось долистывать вниз, чтобы вообще его увидеть. */
+.reports__preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--view-content-top) calc(var(--gap) * 2) var(--gap);
+}
+.reports__preview-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-faint); font-size: 13.5px; }
+
+.report-preview__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  margin-bottom: 14px;
+  flex: 0 0 auto;
+}
+.report-preview__title { font-size: 18px; font-weight: 700; color: var(--text); }
+.report-preview__meta { font-size: 12px; color: var(--text-muted); }
+/* .report-preview__header — align-items:baseline (выше), но кнопкам своя базовая
+   линия не нужна — весь правый блок (экспорт + обновить) выравниваем по центру
+   отдельно, чтобы не переопределять baseline для .report-preview__title/__meta. */
+.report-preview__actions { display: flex; align-items: center; gap: 4px; align-self: center; }
+.report-preview__refresh { font-size: 18px; }
+
+/* Кнопки выгрузки отчёта в XLSX/PDF (см. js/export.js: headerButtonsHtml,
+   js/reports.js: renderHeader) — иконка + подпись, в стиле .icon-btn (тот же
+   hover/transition), но шире под текст и без фиксированной квадратной формы. */
+.report-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.report-export-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.report-export-btn:disabled { opacity: 0.55; cursor: default; pointer-events: none; }
+.report-export-btn svg { width: 15px; height: 15px; display: block; flex: none; }
+
+/* Таблица отчёта — колонки/строки приходят с сервера (см. reports.js: renderTable),
+   ширина набора колонок непредсказуема (у «Места концентрации» их под два десятка),
+   поэтому скроллится сама, а не сжимает панель. flex:1 + min-height:0 отдаёт ей
+   всю оставшуюся высоту .reports__preview, так что и вертикальная прокрутка строк,
+   и её собственный горизонтальный скроллбар живут внутри этого блока, у нижнего
+   края экрана, а не всей панели целиком. */
+.report-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+/* Перенос вместо горизонтального скролла. Раньше здесь стоял white-space: nowrap —
+   любая таблица с длинным текстовым полем (адрес, место совершения, описание)
+   уходила в горизонтальный скролл, даже когда по ширине панели места хватало.
+   Теперь текст переносится, а скролл включается только когда суммарный min-width
+   колонок реально не влезает в .report-table-wrap.
+
+   Раскладка остаётся авто (table-layout не задаём): при width:100% браузер сам
+   отдаёт узким колонкам (№, дата, число) их max-content, а остаток ширины —
+   длинным текстовым, вместо равных долей fixed-раскладки.
+
+   overflow-wrap: break-word, НЕ anywhere: anywhere обнуляет min-content ячейки
+   (перенос разрешён внутри любого слова), и авто-раскладка получает право сжимать
+   колонку хоть до одного символа — скролл тогда не появится никогда, а таблица
+   выродится в столбики вертикального текста. break-word держит min-content на
+   уровне самого длинного слова и рвёт его, только если иначе слово вылезет за
+   границу ячейки.
+
+   min-width — пол для узких колонок (дата/число не должны схлопываться), он же
+   единственный источник горизонтального скролла при десятке-другом колонок
+   («Места концентрации»). max-width ограничивает аппетит одного длинного
+   текстового поля, когда суммарный контент уже панели; в авто-раскладке для
+   ячеек это ограничение рекомендательное, пол из min-width важнее.
+
+   Действует и на таблицы карточных отчётов (kind="rich"): .rr-table-wrap
+   использует ту же .report-table, отдельного класса у неё нет. Таблицы дашборда
+   (свой набор классов, см. ниже) не затрагиваются.
+   ВНИМАНИЕ: печатная копия этих правил живёт в js/export.js: printCss() и
+   синхронизируется руками. */
+.report-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+.report-table th, .report-table td {
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 70px;
+  max-width: 320px;
+  overflow-wrap: break-word;
+}
+.report-table thead th {
+  /* --accent-softer сам по себе полупрозрачный (см. :root) — годится для
+     зебры строк, но не для «липкой» шапки: при прокрутке строки таблицы
+     просвечивали сквозь неё и накладывались на подписи колонок. Слой тонировки
+     поверх непрозрачного --panel-bg делает шапку полностью непрозрачной, не
+     заводя отдельную «сплошную» копию токена. */
+  background: linear-gradient(var(--accent-softer), var(--accent-softer)), var(--panel-bg);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+}
+.report-table tbody td { border-top: 1px solid var(--border); }
+.report-table tbody tr:first-child td { border-top: none; }
+.report-table tbody tr:nth-child(even) { background: var(--accent-softer); }
+
+/* -------------------------------------- Карточный отчёт (kind="rich", rich-report.js)
+   Таблицы/графики вперемешку в одной вкладке "Отчёты" — .rr-root заменяет
+   .report-table-wrap внутри .reports__preview (см. reports.js: renderReport), тот же
+   принцип "сам скроллится, не сжимает панель". Легенда/подсказки переиспользуют
+   общий .ck-legend/.ck-swatch (см. js/chart-kit.js) и существующие .tabnum/.chart-tip
+   (см. Дашборд ниже) — здесь только то, чего у дашборда/списка-таблицы ещё не
+   было: секции, карточки, сетка элементов внутри карточки, прогресс-бар плана
+   мероприятий. */
+.rr-root { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.rr-section { margin-bottom: calc(var(--gap) * 1.5); }
+.rr-section:last-child { margin-bottom: 0; }
+.rr-section-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.rr-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.rr-card:last-child { margin-bottom: 0; }
+.rr-card-head { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.rr-notes { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.rr-notes li { font-size: 12px; color: var(--text-muted); line-height: 1.5; padding-left: 13px; position: relative; }
+.rr-notes li::before { content: ""; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.rr-card-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 10px; }
+.rr-block { min-width: 0; }
+.rr-block-title { font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
+/* max-width — без него текст внутри SVG (font-size задан в единицах viewBox,
+   т.е. масштабируется как и всё остальное) раздувается, когда в карточке всего
+   один элемент: auto-fit-грид (.rr-card-body выше) отдаёт ему всю ширину карточки
+   (900+ px) вместо "родных" 560 у viewBox — например, "Динамика по месяцам" (один
+   line-график на карточку) выглядела крупнее, чем "Участники" (обычно 2 hbar
+   рядом, каждый уже ближе к 560 от auto-fit). 560 = ширина viewBox всех графиков
+   (columnChart/lineChart/hBarChart, см. rich-report.js) — 1:1 масштаб держит
+   font-size из SVG равным заданному в px независимо от того, сколько элементов
+   в карточке. */
+.rr-block svg { display: block; width: 100%; max-width: 560px; height: auto; }
+/* .rr-block--wide (hbar/hbar-grouped с wide:true — напр. длинные названия категорий,
+   которым нужно больше места слева) — своя, более широкая viewBox-ширина у графика
+   (см. hBarChart в rich-report.js, 760 вместо 560) и свой max-width здесь 1:1 с ней, по
+   той же причине, что и обычный 560 выше: без этого при растяжении на всю ширину
+   карточки раздулся бы только шрифт, а не реальное место под подписи. grid-column: 1/-1
+   — широкий график занимает всю строку целиком, а не одну из колонок auto-fit грида. */
+.rr-block--wide { grid-column: 1 / -1; }
+.rr-block--wide svg { max-width: 760px; }
+/* Общий неймспейс легенды/свотча для всей разметки, которую строит
+   js/chart-kit.js (legend/donutLegend) — введён 2026-08-24 вместо двух
+   параллельных наборов классов (.dash-li/.dash-s только для разметки dashboard.js,
+   отдельный дубль .rr-legend .dash-li/.dash-s у rich-report.js, заведённый именно
+   потому, что общего неймспейса/модуля не было, см. историю в chart-kit.js).
+   .ck-legend — контейнер (ряд с переносом), .ck-legend-item — один пункт
+   (свотч + подпись), .ck-swatch — сам цветной квадратик. .ck-legend-name/
+   .ck-legend-value — для легенды donutChart (подпись категории + число), где
+   у элемента ДВЕ текстовых части, а не одна, как у обычной legend(). Вложенным
+   в flex-колонку контекстам (.dash-dleg ниже) .ck-legend-item растягивается на
+   всю строку сама — inline-flex "блокируется" браузером, когда становится
+   flex-элементом (CSS Display L3), поэтому отдельный override для .dash-dleg не
+   нужен: margin-left:auto у .ck-legend-value прижимает число к правому краю. */
+/* ChartKit.hBarList — горизонтальные полосы с подписью НАД полосой, разметка
+   HTML (не SVG), см. комментарий у самой функции в js/chart-kit.js про то,
+   почему именно HTML. Контейнер занимает всю высоту ячейки и раскидывает
+   строки равномерно: 5 категорий («Виды нарушений ПДД») и 6 («Виды ДТП»)
+   заполняют одинаковую высоту без подгонки числа строк в JS.
+   Шрифт здесь в НАСТОЯЩИХ css-пикселях и не зависит ни от числа категорий,
+   ни от размера окна — в этом и был смысл ухода от SVG. */
+/* flex:1/width:100% — .dash-chart это flex-строка (см. ниже), без них блок встал
+   бы по ширине контента, а не ячейки. */
+.ck-hbars { display: flex; flex-direction: column; justify-content: space-between;
+  flex: 1; width: 100%; height: 100%; min-height: 0; min-width: 0; }
+/* Свободная высота раздаётся строкам через justify-content: space-between, без
+   собственного gap — иначе на 6 категориях («Виды ДТП») сумма фикс. высот строк
+   плюс зазоры перерастала ячейку и последняя полоса обрезалась низом панели. */
+.ck-hbar { min-width: 0; }
+.ck-hbar__top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+/* Название не усекается по символам (как делал truncate() у hBarChart) — оно
+   занимает всю строку и при аномальной длине честно обрезается многоточием
+   средствами css, а число справа при этом не съезжает (flex: none). */
+.ck-hbar__name { font-size: 12px; color: var(--text); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-hbar__val { flex: none; margin-left: auto; font-size: 11.5px; color: var(--text-muted); font-weight: 600; }
+.ck-hbar__track { height: 10px; border-radius: 4px; background: var(--bg-app); overflow: hidden; }
+.ck-hbar__fill { height: 100%; border-radius: 4px; min-width: 2px; }
+/* Плата за отказ от SVG: строки имеют минимальную высоту и, в отличие от
+   масштабируемой картинки, ниже неё не ужимаются. Ниже 820px высоты окна
+   метрики строки поджимаются (см. @media в конце файла), а на совсем низких
+   экранах список честно прокручивается вместо того, чтобы обрезать последнюю
+   категорию низом панели. */
+.ck-hbars { overflow-y: auto; }
+
+.ck-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 8px; font-size: 12px; color: var(--text-muted); }
+.ck-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.ck-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.ck-legend-name { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-legend-value { margin-left: auto; color: var(--text-faint); font-weight: 600; }
+.rr-table-wrap { max-height: 320px; }
+/* wide (напр. таблица по отделам, см. rich-report.js: tableElement) — снимает только
+   высотный кап/скролл, НЕ растягивает элемент на всю ширину карточки (та функция —
+   у .rr-block--wide выше, которым таблицы не помечаются, см. renderElement): строк
+   может быть много, весь список должен быть виден сразу, а не прятаться за прокруткой. */
+.rr-table-wrap--wide { max-height: none; }
+.rr-table-wrap .report-table tr.rr-total td { font-weight: 700; border-top: 1px solid var(--border-strong); }
+/* Стопка мини-таблиц ("Анализ по типам ДТП" — колонка таблиц по Городу+Отделу слева от
+   сводной таблицы по видам ДТП справа, см. rich-report.js: tableStackElement) — просто
+   вертикальный флекс с отступом, каждая мини-таблица держит рамку+скругление сама на
+   себе (в отличие от обычной .rr-table-wrap, у которой рамку даёт .report-table-wrap),
+   т.к. закрашенная плашка-заголовок должна визуально сливаться с таблицей под ней. */
+.rr-table-stack { display: flex; flex-direction: column; gap: 14px; }
+.rr-table-stack-item { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.rr-table-stack-head { background: var(--accent); color: #fff; font-weight: 700; font-size: 12px; text-align: center; padding: 8px 12px; }
+.rr-table-stack-item .rr-table-wrap { border: none; border-radius: 0; }
+/* Пончик (pie, см. rich-report.js: pieChart/pieLegend) — единственный .rr-block с
+   категориальной (не акцент/контекст) палитрой, см. CAT в rich-report.js. Диаграмма
+   центрируется (fixed 200px, не растягивается на всю колонку auto-fit грида — в отличие
+   от line/hbar/column, у круга нет смысла расти шире своего "родного" размера) и легенда
+   идёт под ним, а не сбоку (в отличие от dashboard.js: donut+dleg рядом) — колонки
+   .rr-card-body у карточных отчётов обычно уже, чем в дашборде, сбоку легенда не влезла бы. */
+.rr-pie-block { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.rr-pie-block svg { max-width: 200px; }
+.rr-pie-legend { justify-content: center; margin-top: 10px; }
+.rr-pie-legend .ck-legend-item { gap: 8px; }
+.rr-note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: var(--accent-softer);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  line-height: 1.5;
+}
+.rr-progress { display: flex; flex-direction: column; gap: 14px; }
+.rr-progress-top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; margin-bottom: 6px; color: var(--text); }
+.rr-progress-track { height: 8px; border-radius: 999px; background: var(--accent-softer); overflow: hidden; }
+.rr-progress-fill { height: 100%; border-radius: 999px; background: var(--accent); }
+.rr-progress-note { font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
+
+/* -------------------------------------- Дашборд · сетка шаблона (.dash-*)
+   Строительные блоки для шаблонов дашборда плагинов (dashboardTemplates, см.
+   js/backends/_demo.js): плотная сетка на всю высоту экрана — без внутренней
+   прокрутки на обычном мониторе (графики тянутся по высоте своих ячеек).
+   Раскладка .dash-layout — фильтр-строка сверху, слева KPI + плитки, справа
+   динамика / две панели полос / ряд пончиков. Шаблону с другой раскладкой
+   достаточно своих селекторов поверх .dash-panel/.dash-chart/.dash-flt. */
+.view--dashboard .dash-layout {
+  height: 100%; overflow: hidden;
+  padding: var(--view-content-top) 30px 16px;
+  display: grid; gap: 9px;
+  grid-template-columns: 340px 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "flt  flt"
+    "left right";
+}
+
+/* Левая колонка: KPI вертикально, под ними плитки 2×N */
+.dash-left { grid-area: left; display: grid; grid-template-rows: repeat(3, auto) 1fr; gap: 9px; min-height: 0; }
+/* Правая колонка: динамика (сверху), две панели полос рядом, ряд пончиков.
+   «Динамике» отдано больше высоты: столбцы по месяцам с подписями значений —
+   самый плотный по вертикали график экрана, а полосы (ChartKit.hBarList,
+   подпись над полосой) своей высоты почти не требуют. */
+.dash-right { grid-area: right; display: grid; gap: 9px; min-height: 0; min-width: 0;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: minmax(0,1.35fr) minmax(0,1.1fr) minmax(0,1fr);
+  grid-template-areas: "dyn dyn" "vid nar" "cnd cnd"; }
+.tabnum { font-variant-numeric: tabular-nums; }
+
+.dash-flt { grid-area: flt; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+  font-size: 13.5px; color: var(--text-muted); background: var(--panel-bg);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 16px; }
+.dash-flt b { color: var(--text); font-weight: 600; }
+.dash-flt-title { font-size: 15px; font-weight: 700; color: var(--text); margin-right: 4px; }
+.dash-flt-spacer { margin-left: auto; color: var(--text-faint); }
+.dash-flt-upd { color: var(--text-faint); white-space: nowrap; }
+/* Спиннер вместо даты на время load() (см. DashboardApp.setUpdating в js/dashboard.js) —
+   тот же spin@keyframes/размер кольца, что у пилюли счётчика слоя (.layer-item__count). */
+.dash-flt-upd .dash-flt-spin { display: none; width: 9px; height: 9px; margin-left: 5px;
+  border: 1.5px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+  vertical-align: -1px; animation: spin 0.7s linear infinite; }
+.dash-flt-upd.is-loading .dash-flt-upd-val { display: none; }
+.dash-flt-upd.is-loading .dash-flt-spin { display: inline-block; }
+.dash-flt-btn { flex: none; width: 28px; height: 28px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: 15px; line-height: 1; cursor: pointer; color: var(--text-muted);
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  transition: background .12s, border-color .12s, color .12s; }
+.dash-flt-btn:hover { background: var(--hover-bg); border-color: var(--accent); color: var(--accent); }
+.dash-flt-btn:active { transform: translateY(1px); }
+.dash-flt-btn.is-busy { opacity: .5; pointer-events: none; }
+
+.dash-kpi { height: 100%; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: 12px; padding: 9px 14px; display: flex; align-items: center; gap: 14px; min-height: 0; }
+.dash-k-lab { font-size: 14px; color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.dash-sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.dash-k-num { font-size: 38px; font-weight: 700; letter-spacing: -.02em; line-height: 1; color: var(--text); }
+.dash-k-side { font-size: 13px; color: var(--text-faint); line-height: 1.35; text-align: right; }
+.dash-delta { font-weight: 700; color: var(--text-muted); }
+.dash-delta.is-good { color: #12833a; }
+
+.dash-panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 8px 11px 9px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.dash-panel h3 { font-size: 14px; font-weight: 700; margin: 0 0 6px; display: flex; align-items: center; gap: 7px; color: var(--text); }
+.dash-panel h3 .dash-tick { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.dash-panel h3 .dash-lg { margin-left: auto; display: flex; gap: 13px; font-size: 12.5px; color: var(--text-muted); font-weight: 500; }
+.dash-panel h3 .dash-lg .dash-li { display: inline-flex; align-items: center; gap: 6px; }
+.dash-panel h3 .dash-lg .dash-s { width: 10px; height: 10px; border-radius: 2px; }
+.dash-chart { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.dash-chart svg { width: 100%; height: 100%; }
+
+.dash-cnd { grid-area: cnd; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; min-height: 0; }
+.dash-dcell { display: flex; gap: 10px; min-height: 0; align-items: center; }
+.dash-dcell .dash-chart { height: 100%; aspect-ratio: 1; flex: 0 0 auto; }
+/* .ck-legend-item внутри .dash-dleg (flex-колонка) блокируется браузером до
+   полноширинной строки сама, см. комментарий у .ck-legend выше — здесь только
+   контейнер, отдельных .dash-dleg .ck-legend-item/.ck-swatch правил не нужно. */
+.dash-dleg { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+
+.dash-facwrap { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 8px; min-height: 0; }
+.dash-fac { min-width: 0; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 7px 9px; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+.dash-fac .dash-fl { font-size: 12px; color: var(--text-muted); line-height: 1.2; min-height: 29px; display: flex; align-items: center; justify-content: center; }
+.dash-fac .dash-fv { font-size: 22px; font-weight: 700; color: var(--accent); letter-spacing: -.01em; line-height: 1.1; }
+.dash-fac .dash-fc { font-size: 10px; color: var(--text-faint); }
+
+.chart-tip { position: fixed; z-index: 2000; pointer-events: none; opacity: 0;
+  transform: translate(-50%, -140%); transition: opacity .08s;
+  background: rgba(27,36,52,.94); color: #fff; font-size: 12px; padding: 5px 9px;
+  border-radius: 7px; white-space: nowrap; box-shadow: var(--shadow-panel); }
+.chart-tip b { font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .chart-tip { transition: none; } }
+
+/* Узкие/низкие экраны — снимаем фикс. высоту, стекаем колонки, прокрутка внешнего .view.
+   Графикам задаём явную высоту (иначе flex-ячейка без фикс. высоты схлопнулась бы в 0). */
+@media (max-width: 860px) {
+  .view--dashboard .dash-layout { height: auto; overflow: visible; padding: var(--view-content-top) 14px 16px;
+    grid-template-columns: 1fr; grid-template-rows: auto auto auto; grid-template-areas: "flt" "left" "right"; }
+  .dash-left { grid-template-rows: none; grid-auto-rows: auto; }
+  .dash-right { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: auto;
+    grid-template-areas: "dyn" "vid" "nar" "cnd"; }
+  .dash-cnd { grid-template-columns: 1fr; }
+  .dash-chart { height: 200px; }
+  .dash-dcell .dash-chart { height: 150px; }
+}
+
+/* Низкие окна: поджимаем метрики строки .ck-hbars, чтобы 6 категорий
+   укладывались в свою ячейку и на 768px-окне. Полосы — HTML, а не SVG (см.
+   ChartKit.hBarList — там же, почему), поэтому высота строки задаётся здесь и
+   сама не ужимается. Ниже ~740px высоты остаётся прокрутка списка
+   (.ck-hbars{overflow-y:auto}). line-height задан явно: нормальная (~1.35 у
+   11px) сама по себе съедала больше, чем экономят шрифт и полоса. */
+@media (max-height: 820px) {
+  .ck-hbar__top { margin-bottom: 2px; line-height: 1.15; }
+  .ck-hbar__name { font-size: 11px; }
+  .ck-hbar__val { font-size: 11px; }
+  .ck-hbar__track { height: 8px; }
+}
+
+/* ------------------------------------------------------------ Responsive */
+@media (max-width: 720px) {
+  :root {
+    --panel-w: min(78vw, 320px);
+    /* Экономим место под мобильный список отчётов (max-height:40% ниже) —
+       воздух над контентом остаётся, просто чуть уже, чем на десктопе. */
+    --view-content-top: 72px;
+  }
+  .view-switch__btn { padding: 7px 11px; font-size: 11.5px; }
+  .reports { flex-direction: column; }
+  .reports__list { flex: 0 0 auto; max-height: 40%; border-right: none; border-bottom: 1px solid var(--border); }
+  /* На мобильном сворачивание идёт по высоте (flex-direction: column), а не
+     по ширине — .reports__list-inner здесь не должен держать десктопную
+     фиксированную ширину 300px, иначе список либо обрежется на узком
+     экране, либо оставит пустое место на широком. */
+  .reports__list-inner { width: 100%; }
+}
+
+/* ------------------------------------------ Дашборд · скелетон и ошибка
+   Оба состояния рисует ядро (js/dashboard.js: skeletonHtml/errorHtml), а не
+   шаблон плагина — разметка у них не зависит ни от одной схемы данных. */
+.view--dashboard {
+  /* Локальные токены «ошибка»/«мягкий акцент» — в :root их нет, ни одному
+     другому экрану красный статус пока не нужен. */
+  --dash-danger: #b3261e;
+  --dash-danger-bg: rgba(179, 38, 30, .09);
+  --dash-accent-bg: rgba(43, 87, 212, .10);
+}
+
+.dash-btn { height: 36px; padding: 0 16px; border: 1px solid var(--border-strong);
+  background: var(--panel-bg); border-radius: var(--radius-sm);
+  font: 600 12.5px/1 inherit; color: var(--text); cursor: pointer; }
+.dash-btn:hover { border-color: var(--accent); color: var(--accent); }
+.dash-btn--primary { border-color: transparent; background: var(--accent); color: #fff; font-weight: 700; }
+.dash-btn--primary:hover { background: var(--accent-hover); color: #fff; }
+.dash-btn.is-busy { opacity: .5; pointer-events: none; }
+
+/* Карточка ошибки занимает экран целиком: прошлые (или демо-) цифры при
+   ошибке не подмешиваем — см. js/dashboard.js: errorHtml. */
+.dash-err { display: flex; align-items: flex-start; gap: 13px;
+  margin: var(--view-content-top) 16px 16px;
+  background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-soft); padding: 16px 17px; }
+.dash-err__ico { flex: none; display: grid; place-items: center; width: 38px; height: 38px;
+  border-radius: 11px; background: var(--dash-danger-bg); color: var(--dash-danger); }
+.dash-err__body { min-width: 0; flex: 1; }
+.dash-err__body h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; color: var(--text); }
+.dash-err__body p { margin: 0 0 12px; font-size: 12.5px; line-height: 1.55; color: var(--text-muted); }
+.dash-err__acts { display: flex; gap: 9px; flex-wrap: wrap; }
+.dash-err__acts .dash-btn { height: 34px; }
+.dash-err__detail { margin: 12px 0 0; padding: 10px 12px; max-height: 220px; overflow: auto;
+  background: var(--bg-app); border-radius: var(--radius-sm);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
+
+.dash-skel { margin: var(--view-content-top) 16px 16px;
+  background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-soft); padding: 13px 14px; }
+.dash-skel__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px; margin-bottom: 12px; }
+.dash-skel__kpi { display: flex; align-items: center; gap: 11px; }
+.dash-skel__ico { flex: none; width: 38px; height: 38px; border-radius: 11px; background: var(--bg-app); }
+.dash-skel__lines { flex: 1; min-width: 0; }
+.dash-skel__l1 { display: block; height: 18px; width: 58%; border-radius: 5px;
+  background: var(--bg-app); margin-bottom: 6px; }
+.dash-skel__l2 { display: block; height: 10px; width: 78%; border-radius: 4px; background: #f4f6fa; }
+.dash-skel__bars { display: flex; flex-direction: column; gap: 9px; }
+.dash-skel__bars i { height: 12px; border-radius: 4px; background: var(--bg-app); }
+.dash-skel__bars i:nth-child(2) { width: 86%; background: #f4f6fa; }
+.dash-skel__bars i:nth-child(3) { width: 92%; }
+.dash-skel__note { margin-top: 13px; display: flex; align-items: center; gap: 9px;
+  font-size: 12px; color: var(--text-muted); }
+.dash-skel__spin { width: 14px; height: 14px; border-radius: 50%; flex: none;
+  border: 2.2px solid var(--dash-accent-bg); border-top-color: var(--accent);
+  animation: spin .8s linear infinite; }
+
+@media (max-width: 720px) {
+  .dash-err, .dash-skel { margin: var(--view-content-top) 14px 16px; }
+  .dash-skel__row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
