@@ -1276,6 +1276,9 @@ const MapApp = (function () {
           lyr.overlayLayers.push({ layer: overlay, selectedColor: ov.selectedColor });
           overlays.push(overlay);
         });
+        // Иконки начала/конца трека — после оверлеев, чтобы лечь поверх (у маркеров
+        // своя панель, но порядок в группе всё равно оставляем «линия → всё остальное»).
+        overlays.push(...buildTrackEndMarkers(meta, obj));
       } else if (meta.type === 'polygon') {
         // dashArray — из тех же native-данных (1С шлёт его только для отдельных
         // подвидов, напр. АдминистративныеЕдиницы.Вид = РайонГорода, см. АА-проект
@@ -1310,6 +1313,42 @@ const MapApp = (function () {
       list.push({ field: 'noRouteDots', color: 'red', selectedColor: '#AA226F' });
     }
     return list;
+  }
+
+  // Маркеры начала/конца линии (аналог addDirectionMarkers в нативной карте 1С,
+  // CommonTemplates/Map_js, ветка isTrack): meta.trackMarkers {field, startImg, endImg} —
+  // в поле объекта field массив точек {coords:[lat,lng], time, isStart, isEnd}, картинки —
+  // ключи GET /icons. Промежуточные точки (стрелки направления в 1С) не рисуем. Нет картинки
+  // в наборе (или /icons не загрузился) — запасные js/icons/НачалоТрека.svg/КонецТрека.svg.
+  // Маркеры без _objId (findLayer их не видит), клик выделяет сам трек.
+  const TRACK_MARKER_SIZE = 20;
+  const TRACK_MARKER_FALLBACK = { start: 'js/icons/НачалоТрека.svg', end: 'js/icons/КонецТрека.svg' };
+
+  function buildTrackEndMarkers(meta, obj) {
+    const def = meta.trackMarkers;
+    const points = def && def.field ? obj[def.field] : null;
+    if (!Array.isArray(points) || !points.length) return [];
+    // Как в 1С: подпись трека — наименование до «за период».
+    const name = String(obj.name || '');
+    const cut = name.indexOf('за период');
+    const title = (cut >= 0 ? name.slice(0, cut) : name).trim();
+    const size = TRACK_MARKER_SIZE;
+    const markers = [];
+    points.forEach(p => {
+      if (!p || !Array.isArray(p.coords) || !(p.isStart || p.isEnd)) return;
+      const kind = p.isEnd ? 'end' : 'start';
+      const img = kind === 'end' ? def.endImg : def.startImg;
+      const src = (img && serverIcons[img]) || TRACK_MARKER_FALLBACK[kind];
+      const marker = L.marker(p.coords, {
+        icon: L.icon({ iconUrl: src, iconSize: [size, size], iconAnchor: [size / 2, size / 2] })
+      });
+      const tip = [title, p.time, kind === 'end' ? 'Конец трека' : 'Начало трека']
+        .filter(Boolean).join('<br>');
+      marker.bindTooltip(tip, { className: 'map-tip', direction: 'left', offset: [-10, -10], opacity: 0.8 });
+      marker.on('click', () => selectObject(meta.id, obj.id));
+      markers.push(marker);
+    });
+    return markers;
   }
 
   // =====================================================================
