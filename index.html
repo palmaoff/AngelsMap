@@ -66,20 +66,15 @@
   <script src="js/auth.js?v=4"></script>
   <script src="js/settings-form.js?v=1"></script>
 
-  <!-- Модалка «Добавить ДТП» (создание объекта слоя ДТП по клику на карте) —
-       см. js/dtp-create-form.js шапку. Грузится до backends/accident-analysis.js,
-       чей createDtpCommand.onComplete вызывает DtpCreateForm.open(...). -->
-  <script src="js/dtp-create-form.js?v=1"></script>
-
   <!-- Бэкенд-плагин (window.BackendPlugin) — вся специфика конкретной 1С-базы
        (baseUrl, слоевые иконки, дашборд/отчёты), см. js/backends/accident-analysis.js
        шапку. Ровно один из тегов ниже раскомментирован — переключение бэкенда
        делается вручную при разворачивании, без рантайм-детекта (см. CLAUDE.md). -->
 
   <!--<script src="js/backends/_demo.js?v=1"></script>-->
-  <script src="js/backends/clean-roads.js?v=7"></script>
+  <script src="js/backends/clean-roads.js?v=9"></script>
 
-  <script src="js/map.js?v=67"></script>
+  <script src="js/map.js?v=69"></script>
   <script src="js/dashboard.js?v=15"></script>
   <script src="js/rich-report.js?v=2"></script>
 

@@ -230,8 +230,13 @@ window.DemoServer = (function () {
     const dots = [all.slice(0, cut1 + 1), all.slice(cut1, cut2 + 1), all.slice(cut2)];
     const s1 = int(10, 20), s2 = int(65, 75);
     const noRouteDots = [all.slice(s1, s1 + int(6, 10)), all.slice(s2, s2 + int(6, 10))];
+    const s3 = int(35, 45), s4 = int(80, 88);
+    const problemOrderDots = [all.slice(s3, s3 + int(5, 9)), all.slice(s4, s4 + int(4, 7))];
+    // фрагменты трека «в зонах работ» (zoneDots) — режим «только в зонах»
+    const z1 = int(5, 12), z2 = int(50, 58);
+    const zoneDots = [all.slice(z1, z1 + int(12, 18)), all.slice(z2, z2 + int(10, 16))];
     return { id: 'Треки_' + guid(), vehicleId: v.id, name: `Трек ${v.plate}`, plate: v.plate, color: PALETTE[i],
-      dots, noRouteDots, date: '2026-09-27', from: `0${6 + i}:00`, to: `${12 + i}:30`,
+      dots, noRouteDots, problemOrderDots, zoneDots, date: '2026-09-27', from: `0${6 + i}:00`, to: `${12 + i}:30`,
       lengthKm: all.reduce((s, q, k) => k ? s + distKm(all[k - 1], q) : 0, 0) };
   });
 
@@ -294,7 +299,7 @@ window.DemoServer = (function () {
   const STORE_KEY = 'demoServer.settings';
   const DEFAULTS = {
     'layer:Транспорт': { types: VEHICLE_TYPES.map(t => t[0]), onlyMoving: false },
-    'layer:Треки': { vehicles: tracks.map(t => t.vehicleId), highlightNoRoute: true },
+    'layer:Треки': { vehicles: tracks.map(t => t.vehicleId), highlightNoRoute: true, highlightProblem: false, onlyZones: false },
     'layer:Происшествия': { begin: '2026-01-01', end: TODAY, severity: SEVERITY.map(s => s[0]), types: [],
       withVictims: false, minVictims: null, dayOnly: false, nightOnly: false, onlyConfirmed: false },
     'dashboard': { begin: '2026-01-01', end: TODAY, districts: [], onlyConfirmed: false },
@@ -330,6 +335,9 @@ window.DemoServer = (function () {
   };
   const districtOptions = () => districts.map(d => [d.id, d.name]);
 
+  // Правило приоритета 1С: любая подсветка выключает зонный режим.
+  const zonesMode = s => !!s.onlyZones && !s.highlightNoRoute && !s.highlightProblem;
+
   function layerSettingsForm(id) {
     const s = getSettings('layer:' + id);
     if (id === 'Транспорт') {
@@ -341,7 +349,10 @@ window.DemoServer = (function () {
     if (id === 'Треки') {
       return { layerId: id, title: 'Настройки слоя «Треки»', html: F.form([
         F.multi('vehicles', 'Транспортные средства', tracks.map(t => [t.vehicleId, t.plate]), s.vehicles),
-        F.check('highlightNoRoute', 'Подсвечивать участки без маршрута', s.highlightNoRoute)
+        // Три взаимоисключающих флажка (data-exclusive-with — список через запятую).
+        F.check('highlightNoRoute', 'Подсвечивать участки без маршрута', s.highlightNoRoute, { exclusiveWith: 'onlyZones' }),
+        F.check('highlightProblem', 'Подсвечивать участки без наряда или с отклонением', s.highlightProblem, { exclusiveWith: 'onlyZones' }),
+        F.check('onlyZones', 'Только в зонах выполнения работ', zonesMode(s), { exclusiveWith: 'highlightNoRoute,highlightProblem' })
       ]) };
     }
     if (id === 'Происшествия') {
@@ -391,8 +402,15 @@ window.DemoServer = (function () {
     return [
       { id: 'Транспорт', label: 'Транспорт', group: 'Транспорт', type: 'point', color: '#2a78d6', settings: true },
       { id: 'Треки', label: 'Треки за сегодня', group: 'Транспорт', type: 'line', color: '#6a3d9a', settings: true,
-        playback: true, highlightNoRoute: !!tr.highlightNoRoute,
-        legend: shownTracks.map(t => ({ color: t.color, label: t.plate })) },
+        playback: true,
+        // highlightNoRoute — legacy-флаг (красный noRouteDots), overlays — общий механизм,
+        // geometryField — зонный режим (только когда подсветок нет).
+        highlightNoRoute: !!tr.highlightNoRoute,
+        overlays: tr.highlightProblem ? [{ field: 'problemOrderDots', color: '#e8c022', selectedColor: '#b8860b' }] : undefined,
+        geometryField: zonesMode(tr) ? 'zoneDots' : undefined,
+        legend: shownTracks.map(t => ({ color: t.color, label: t.plate }))
+          .concat(tr.highlightNoRoute ? [{ color: 'red', label: 'Участки без маршрута' }] : [])
+          .concat(tr.highlightProblem ? [{ color: '#e8c022', label: 'Без наряда / с отклонением' }] : []) },
       { id: 'Остановки', label: 'Остановки', group: 'Транспорт', type: 'point', color: '#1baf7a', cluster: false },
       { id: 'Происшествия', label: 'Происшествия', group: 'Происшествия', type: 'point', color: '#e34948', settings: true, wideSettings: true },
       { id: 'ТепловаяКарта', label: 'Плотность происшествий', group: 'Происшествия', type: 'heat', color: '#d7191c' },
@@ -424,7 +442,8 @@ window.DemoServer = (function () {
     if (id === 'Треки') {
       const s = getSettings('layer:Треки');
       return tracks.filter(t => s.vehicles.includes(t.vehicleId))
-        .map(t => ({ id: t.id, name: t.name, dots: t.dots, color: t.color, noRouteDots: t.noRouteDots }));
+        .map(t => ({ id: t.id, name: t.name, dots: t.dots, color: t.color, noRouteDots: t.noRouteDots,
+          problemOrderDots: t.problemOrderDots, zoneDots: t.zoneDots }));
     }
     if (id === 'Остановки') return stops.map(s => ({ id: s.id, name: s.name, dot: s.dot }));
     if (id === 'Происшествия') {

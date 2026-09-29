@@ -39,20 +39,23 @@ const SettingsForm = (function () {
   // Взаимоисключающая пара чекбоксов (например, "Сравнивать кварталы"/"Сравнивать года" в
   // форме настроек отчёта «Аварийность (сводный)» — см. ААКартографияВнешнееAPI.
   // АтрибутИсключения/РядЧекбокс) — сервер помечает такой чекбокс атрибутом
-  // data-exclusive-with="имяДругогоПоля"; при его включении снимаем отметку с чекбокса,
-  // на который он указывает (если он есть в той же форме), и рассылаем change на снятое
-  // поле — на случай, если от него зависят другие data-show-if строки. Тот же принцип
+  // data-exclusive-with="имяДругогоПоля" (или список имён через запятую:
+  // "поле1,поле2"); при его включении снимаем отметку с чекбоксов, на которые он
+  // указывает (если они есть в той же форме), и рассылаем change на снятые поля — на
+  // случай, если от них зависят другие data-show-if строки. Тот же принцип
   // "сервер размечает, клиент не знает о смысле конкретных полей", что и
   // applySettingsDependencies выше.
   function wireExclusiveCheckboxes(container) {
     container.querySelectorAll('[data-exclusive-with]').forEach(checkbox => {
       checkbox.addEventListener('change', () => {
         if (!checkbox.checked) return;
-        const other = container.querySelector(`[name="${checkbox.dataset.exclusiveWith}"]`);
-        if (other && other !== checkbox && other.checked) {
-          other.checked = false;
-          other.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+        checkbox.dataset.exclusiveWith.split(',').map(s => s.trim()).filter(Boolean).forEach(name => {
+          const other = container.querySelector(`[name="${name}"]`);
+          if (other && other !== checkbox && other.checked) {
+            other.checked = false;
+            other.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
       });
     });
   }

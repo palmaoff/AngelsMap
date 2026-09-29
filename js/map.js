@@ -1251,23 +1251,31 @@ const MapApp = (function () {
     // decorate-sort-undecorate'ом выше.
     items.forEach(obj => {
       let lyr;
-      let noRouteOverlay = null;
+      const overlays = [];
       if (meta.type === 'line') {
-        lyr = L.polyline(obj.dots, { color: obj.color || meta.color, weight: 4, opacity: 0.85 });
-        // Подсветка участков без маршрута (аналог Map.prototype.addPolygon,
-        // ветка FigureType === 4, в нативной карте 1С — см. traffic monitor/
-        // src/CommonTemplates/Карта_Map_js/Ext/Template.txt): некликабельный
-        // оверлей поверх основной линии для точек трека, у которых на сервере
-        // не проставлен ТрекиКоординаты.Маршрут. Флаг слоя приходит с сервера
-        // (highlightNoRoute в GET /layers) — этот код общий для любого line-
-        // слоя, без хардкода 'Треки', но фактически данные с noRouteDots
-        // печёт только Каталог.Треки.
-        if (meta.highlightNoRoute && Array.isArray(obj.noRouteDots) && obj.noRouteDots.length) {
-          const noRouteStyle = { interactive: false, color: 'red', weight: 4, opacity: 1 };
-          noRouteOverlay = L.polyline(obj.noRouteDots, noRouteStyle);
-          noRouteOverlay._origStyle = { ...noRouteStyle };
-          lyr.noRouteLayer = noRouteOverlay;
-        }
+        // meta.geometryField — имя поля объекта с геометрией вместо dots (зонный режим
+        // Треков: 'zoneDots'). Пустая геометрия — объект не рисуем (как в 1С).
+        const dots = meta.geometryField ? obj[meta.geometryField] : obj.dots;
+        if (!Array.isArray(dots) || !dots.length) return;
+        lyr = L.polyline(dots, { color: obj.color || meta.color, weight: 4, opacity: 0.85 });
+        // img трека — картинка его ТС из GET /icons (сервер кладёт тот же ключ, что у
+        // объекта слоя ТС); нужна только маркеру воспроизведения, см. playTrack.
+        lyr._img = obj.img;
+        // Подсветки участков (аналог Map.prototype.addPolygon, ветка FigureType === 4,
+        // в нативной карте 1С): некликабельные оверлеи поверх основной линии. Какие
+        // поля объекта рисовать и каким цветом — решает сервер (meta.overlays), ядро
+        // ничего не знает о конкретных полях. Legacy: meta.highlightNoRoute (traffic
+        // monitor) эквивалентен оверлею noRouteDots красным.
+        lyr.overlayLayers = [];
+        getLineOverlays(meta).forEach(ov => {
+          const pts = obj[ov.field];
+          if (!Array.isArray(pts) || !pts.length) return;
+          const style = { interactive: false, color: ov.color, weight: 4, opacity: 1 };
+          const overlay = L.polyline(pts, style);
+          overlay._origStyle = { ...style };
+          lyr.overlayLayers.push({ layer: overlay, selectedColor: ov.selectedColor });
+          overlays.push(overlay);
+        });
       } else if (meta.type === 'polygon') {
         // dashArray — из тех же native-данных (1С шлёт его только для отдельных
         // подвидов, напр. АдминистративныеЕдиницы.Вид = РайонГорода, см. АА-проект
@@ -1283,9 +1291,25 @@ const MapApp = (function () {
       // поверх неё (Canvas-рендерер тоже красит по порядку добавления — см.
       // CLAUDE.md, "Polygon z-order"). bindObject() для оверлея намеренно не
       // зовётся — см. комментарий выше про _objId и findLayer().
-      if (noRouteOverlay) group.addLayer(noRouteOverlay);
+      overlays.forEach(overlay => group.addLayer(overlay));
     });
     return group;
+  }
+
+  // Оверлеи line-слоя: meta.overlays [{field, color, selectedColor}] + legacy-алиас
+  // meta.highlightNoRoute (красный noRouteDots, если такого оверлея ещё нет).
+  function getLineOverlays(meta) {
+    const list = Array.isArray(meta.overlays)
+      ? meta.overlays.filter(ov => ov && ov.field).map(ov => ({
+          field: ov.field,
+          color: ov.color || 'red',
+          selectedColor: ov.selectedColor || ov.color || 'red'
+        }))
+      : [];
+    if (meta.highlightNoRoute && !list.some(ov => ov.field === 'noRouteDots')) {
+      list.push({ field: 'noRouteDots', color: 'red', selectedColor: '#AA226F' });
+    }
+    return list;
   }
 
   // =====================================================================
@@ -2091,27 +2115,28 @@ const MapApp = (function () {
       dashArray: null
     });
     if (geomType !== 'polygon' && lyr.bringToFront) lyr.bringToFront();
-    // Подсветка участков без маршрута у выбранного трека (аналог
-    // SetTrackNoRouteSelectionStyle в нативной карте 1С, Карта_Map_js) —
-    // перекрашиваем оверлей и поднимаем его поверх ПОСЛЕ основной линии,
-    // иначе утолщённая (weight+3) выделенная линия перекроет его. Толщину
-    // оверлея не трогаем — тонкий пурпурный поверх толстой синей как раз и
-    // отличает "без маршрута" участки выбранного трека от красных участков
-    // соседних треков.
-    if (lyr.noRouteLayer) {
-      lyr.noRouteLayer.setStyle({ color: '#AA226F', opacity: 1 });
-      if (lyr.noRouteLayer.bringToFront) lyr.noRouteLayer.bringToFront();
-    }
+    // Подсветки участков у выбранного трека (аналог SetTrackNoRouteSelectionStyle/
+    // SetTrackOrderIssueSelectionStyle в нативной карте 1С, Карта_Map_js) —
+    // перекрашиваем оверлеи в selectedColor и поднимаем их поверх ПОСЛЕ основной
+    // линии, иначе утолщённая (weight+3) выделенная линия перекроет их. Толщину
+    // оверлея не трогаем — тонкий цветной поверх толстой синей как раз и
+    // отличает подсвеченные участки выбранного трека от участков соседних.
+    (lyr.overlayLayers || []).forEach(({ layer, selectedColor }) => {
+      layer.setStyle({ color: selectedColor, opacity: 1 });
+      if (layer.bringToFront) layer.bringToFront();
+    });
   }
 
   function clearVectorSelection() {
     if (selectedVector && selectedVector._origStyle && selectedVector.setStyle) {
       selectedVector.setStyle(selectedVector._origStyle);
     }
-    // Защита от отсутствия noRouteLayer: весь трек без разрывов маршрута,
-    // опция выключена, либо выделен не трек, а маршрут/полигон.
-    if (selectedVector && selectedVector.noRouteLayer && selectedVector.noRouteLayer._origStyle) {
-      selectedVector.noRouteLayer.setStyle(selectedVector.noRouteLayer._origStyle);
+    // Защита от отсутствия оверлеев: подсветки выключены, участков нет, либо
+    // выделен не трек, а маршрут/полигон.
+    if (selectedVector && selectedVector.overlayLayers) {
+      selectedVector.overlayLayers.forEach(({ layer }) => {
+        if (layer._origStyle) layer.setStyle(layer._origStyle);
+      });
     }
     selectedVector = null;
     if (selectedVG) {
@@ -2123,7 +2148,7 @@ const MapApp = (function () {
   // =====================================================================
   //  Воспроизведение трека
   // =====================================================================
-  // Анимация маркера "Автобусы" вдоль уже загруженных координат трека — без
+  // Анимация маркера ТС (см. buildPlaybackMarker) вдоль уже загруженных координат трека — без
   // отдельного похода на сервер: кликнуть по треку и увидеть эти кнопки можно
   // только когда слой "Треки" уже включён, а значит его данные (GET
   // /layer/Треки) уже лежат в layerState — координаты уже в памяти, в самом
@@ -2149,6 +2174,55 @@ const MapApp = (function () {
     return flat.filter((p, i) => i === 0 || !p.equals(flat[i - 1]));
   }
 
+  // Маркер воспроизведения выглядит как маркер ТС этого трека на слое
+  // транспорта — как в нативной карте 1С, которая двигает сам маркер ТС
+  // (Справочники.Треки.ДанныеДляВоспроизведенияТрека: id "ТранспортныеСредства_…").
+  // Строится той же buildPointMarker, что и точки слоя ТС: картинка с сервера
+  // по img трека (ключ "ТипВыполняемыхРабот<Тип>" из GET /icons), иначе
+  // пиктограмма/иконка плагина для слоя BackendPlugin.playbackMarkerLayer.
+  // Если у плагина нет ни того, ни другого — встроенный автобус ядра (раньше
+  // playTrack в таком случае падал на undefined-иконке и кнопки молча не работали).
+  const DEFAULT_PLAYBACK_ICON = { src: 'js/icons/Автобус.png', width: 30, height: 30, anchorX: 15, anchorY: 15 };
+
+  function buildPlaybackMarker(img, latlng, azimuth) {
+    const layerId = BackendPlugin.playbackMarkerLayer || 'Автобусы';
+    // Трек без img (map-api без этой правки, старый ответ) — всё равно картинка
+    // с сервера: общая картинка ТС из GET /icons (BackendPlugin.playbackDefaultImg),
+    // а не пиктограмма плагина.
+    if (!(img && serverIcons[img])) img = BackendPlugin.playbackDefaultImg;
+    const hasIcon = (img && serverIcons[img])
+      || (BackendPlugin.pointIconShapes && BackendPlugin.pointIconShapes[layerId])
+      || (BackendPlugin.canvasIcons && BackendPlugin.canvasIcons[layerId]);
+    if (!hasIcon) {
+      const d = DEFAULT_PLAYBACK_ICON;
+      return L.marker(latlng, { interactive: false, icon: L.icon({ iconUrl: d.src,
+        iconSize: [d.width, d.height], iconAnchor: [d.anchorX, d.anchorY] }) });
+    }
+    const st = layerState[layerId];
+    const meta = { id: layerId, color: st && st.meta ? st.meta.color : undefined };
+    // || 360: при нулевом азимуте buildPointMarker берёт L.icon без обёртки —
+    // картинку было бы нечем поворачивать на следующих отрезках (см. rotatePlaybackMarker).
+    return buildPointMarker(meta, { dot: [[[latlng.lat, latlng.lng]]], img, azimuth: azimuth || 360 });
+  }
+
+  // Азимут отрезка a→b в градусах по часовой от севера — как azimuth у ТС.
+  function bearing(a, b) {
+    const rad = Math.PI / 180;
+    const y = Math.sin((b.lng - a.lng) * rad) * Math.cos(b.lat * rad);
+    const x = Math.cos(a.lat * rad) * Math.sin(b.lat * rad)
+            - Math.sin(a.lat * rad) * Math.cos(b.lat * rad) * Math.cos((b.lng - a.lng) * rad);
+    return (Math.atan2(y, x) / rad + 360) % 360;
+  }
+
+  // Поворачивает серверную картинку ТС по направлению движения (divIcon из
+  // buildPointMarker, <img> с transform:rotate). Пиктограммы плагина не
+  // поворачиваются — как и на слое ТС.
+  function rotatePlaybackMarker(marker, az) {
+    const el = marker.getElement && marker.getElement();
+    const img = el && el.tagName !== 'IMG' && el.querySelector('img');
+    if (img) img.style.transform = `rotate(${az}deg)`;
+  }
+
   async function playTrack(objId, speed) {
     stopTrackPlayback();
 
@@ -2157,29 +2231,16 @@ const MapApp = (function () {
 
     const token = ++playbackToken;
     const duration = 1000 / speed;
+    const track = findLayer('Треки', objId);
 
-    try {
-      await ensureCanvasIconsLoaded('Автобусы');
-    } catch (e) {
-      console.error('Воспроизведение трека: не удалось загрузить иконку автобуса', e);
-      return;
-    }
-    if (playbackToken !== token) return; // успели остановить, пока грузилась иконка
-
-    const iconDef = BackendPlugin.canvasIcons['Автобусы'];
-    playbackMarker = new CanvasIconMarker(points[0], {
-      renderer: getCanvasIconRenderer(),                   // всегда canvas, см. buildPointMarker
-      radius: Math.max(iconDef.width, iconDef.height) / 2,
-      image: canvasIconReady[iconDef.src],
-      width: iconDef.width, height: iconDef.height,
-      anchorX: iconDef.anchorX, anchorY: iconDef.anchorY
-    }).addTo(map);
+    playbackMarker = buildPlaybackMarker(track && track._img, points[0], bearing(points[0], points[1])).addTo(map);
 
     setPlaybackUI(true);
 
-    for (const point of points) {
+    for (let i = 0; i < points.length; i++) {
       if (playbackToken !== token) return;
-      playbackMarker.slideTo(point, { duration });
+      if (i > 0) rotatePlaybackMarker(playbackMarker, bearing(points[i - 1], points[i]));
+      playbackMarker.slideTo(points[i], { duration });
       await delay(duration);
     }
 

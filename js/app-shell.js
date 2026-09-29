@@ -93,13 +93,6 @@ const AppShell = (function () {
     DashboardApp.init();
     ReportsApp.init();
     if (window.BackendPlugin && BackendPlugin.supportsInsuranceImport) InsuranceImport.init();
-    // DtpCreateForm — в отличие от InsuranceImport, не за отдельным supports-
-    // флагом: его модалка нужна только если подключённый BackendPlugin.mapCommands
-    // содержит команду, которая её открывает (сегодня — createDtpCommand,
-    // accident-analysis), но само по себе мгновенное монтирование пустого DOM-
-    // каркаса безусловно дешевле лишнего флага контракта ради одной проверки —
-    // см. CLAUDE.md, "Создание ДТП по клику".
-    DtpCreateForm.init();
 
     window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
     showView(location.hash.slice(1) || DEFAULT_VIEW);
