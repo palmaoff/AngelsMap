@@ -1322,7 +1322,16 @@ const MapApp = (function () {
         });
         // Иконки начала/конца трека — после оверлеев, чтобы лечь поверх (у маркеров
         // своя панель, но порядок в группе всё равно оставляем «линия → всё остальное»).
-        overlays.push(...buildTrackEndMarkers(meta, obj));
+        const endMarkers = buildTrackEndMarkers(meta, obj);
+        overlays.push(...endMarkers);
+        // Трек без иконок начала/конца (сервер не шлёт их для трека короче трёх точек,
+        // см. Справочники.Треки.МассивДанныхОВременныхТочкахТрека) — обычно стоянка:
+        // линия в пару метров, на карте её не видно, а в счётчике слоя она есть.
+        // Ставим в её начало точку цвета трека, чтобы объект было видно и можно выбрать.
+        if (meta.trackMarkers && !endMarkers.length) {
+          const stub = buildTrackStubMarker(meta, obj, lyr.getLatLngs().flat(Infinity)[0]);
+          if (stub) overlays.push(stub);
+        }
       } else if (meta.type === 'polygon') {
         // dashArray — из тех же native-данных (1С шлёт его только для отдельных
         // подвидов, напр. АдминистративныеЕдиницы.Вид = РайонГорода, см. АА-проект
@@ -1393,6 +1402,16 @@ const MapApp = (function () {
       markers.push(marker);
     });
     return markers;
+  }
+
+  // Точка вместо иконок начала/конца у трека, для которого их нет (см. вызов в
+  // buildVectorGroup). Как и те маркеры — без _objId, клик выделяет сам трек.
+  function buildTrackStubMarker(meta, obj, latlng) {
+    if (!latlng) return null;
+    const marker = L.marker(latlng, { icon: pointIcon(meta, obj) });
+    if (obj.name) marker.bindTooltip(obj.name, OBJECT_TOOLTIP_OPTIONS);
+    marker.on('click', () => selectObject(meta.id, obj.id));
+    return marker;
   }
 
   // =====================================================================
