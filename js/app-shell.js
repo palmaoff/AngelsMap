@@ -48,6 +48,9 @@ const AppShell = (function () {
     if (currentView === 'map' && id !== 'map') {
       MapApp.stopTrackPlayback();
     }
+    // То же для автообновления слоя ТС: скрытая карта сервер не опрашивает,
+    // при возврате на неё — сразу свежий опрос (см. map.js: setViewActive).
+    MapApp.setViewActive(id === 'map');
 
     VIEWS.forEach(v => {
       document.getElementById(viewElId(v.id)).classList.toggle('is-active', v.id === id);
@@ -69,6 +72,19 @@ const AppShell = (function () {
     if (id === 'dashboard') DashboardApp.refit();
 
     currentView = id;
+
+    // Экран могли переключить не через hash (например, BackendPlugin.focusOnMap
+    // вызывает showView('map') с дашборда) — тогда hash остаётся старым, и
+    // клик по кнопке этого экрана ставит тот же hash, hashchange не приходит,
+    // кнопка "не работает". Поэтому hash синхронизируем здесь. Повторный
+    // showView из hashchange выйдет сразу (id === currentView). Если в hash
+    // был валидный экран — это отдельная запись истории ("Назад" вернёт
+    // туда); пустой/мусорный hash при старте просто заменяем.
+    const hashView = location.hash.slice(1);
+    if (hashView !== id) {
+      if (VIEWS.some(v => v.id === hashView)) location.hash = '#' + id;
+      else history.replaceState(null, '', '#' + id);
+    }
   }
 
   function renderSwitch() {

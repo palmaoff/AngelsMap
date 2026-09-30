@@ -81,6 +81,10 @@ const MapApp = (function () {
     // шаг зума независимо от того, активна вкладка или нет.
     if (/[?&]bench=1/.test(location.search)) window.__leafletMap = map;
 
+    // Скрытая вкладка не опрашивает сервер (см. «Автообновление точечного
+    // слоя»); по возвращении — сразу один опрос и снова по таймеру.
+    document.addEventListener('visibilitychange', () => restartAutoRefresh(!document.hidden));
+
     // Подложки — 2ГИС (тот же тайл-сервер, что в нативной карте 1С, см.
     // Карта_Map_js: L.tileLayer('http://tile2.maps.2gis.com/tiles?x={x}&y={y}&z={z}'))
     // и OSM про запас. Переключаются через .basemap-switch (см. buildChrome/setBasemap).
@@ -348,7 +352,8 @@ const MapApp = (function () {
         // старте (prefetchAllLayers) и ручное включение тумблера, если они
         // совпали по времени для одного и того же слоя, ждали ОДИН и тот же
         // запрос, а не слали два одинаковых.
-        layerState[l.id] = { meta: l, group: null, on: false, token: 0, cache: null, pending: null };
+        // gen — поколение настроек слоя, см. invalidateLayerCache.
+        layerState[l.id] = { meta: l, group: null, on: false, token: 0, gen: 0, cache: null, pending: null };
         const swatchCls = l.type === 'line' ? 'layer-item__swatch--line'
                         : l.type === 'polygon' ? 'layer-item__swatch--polygon'
                         : l.type === 'heat' ? 'layer-item__swatch--heat' : '';
@@ -459,7 +464,9 @@ const MapApp = (function () {
       // успел включить слой вручную и toggleLayer для него уже идёт (или
       // наоборот, окажется следующим и найдёт наш st.pending), оба используют
       // один и тот же сетевой запрос, а не дублируют его.
+      const gen = st.gen;
       const data = await fetchLayerDataShared(st, id);
+      if (st.gen !== gen) return;   // настройки сменились — данные по старому фильтру (invalidateLayerCache)
       if (st.cache) return;   // toggleLayer тем временем уже сам всё записал
       st.cache = data;
       // Ни setCount(), ни построение st.group: слой остаётся выключенным —
@@ -536,6 +543,7 @@ const MapApp = (function () {
     const st = layerState[id];
     if (!st || st.on === on) return;
     st.on = on;
+    restartAutoRefresh();   // таймер заводится/снимается вместе с тумблером
     // Токен запроса — инвалидирует любую ещё не завершившуюся загрузку данных
     // этого слоя (см. ниже, почему без этого слой мог "залипать").
     const token = ++st.token;
@@ -641,7 +649,11 @@ const MapApp = (function () {
           try {
             const fresh = await fetchLayerDataShared(st, id);
             if (st.token !== token) return;
-            if (dataChanged(cached, fresh)) {
+            if (dataChanged(cached, fresh) && st.group instanceof RealMarkerLayerHandle && autoRefreshPeriod(st)) {
+              // слой с автообновлением — тот же путь, что у таймера: на месте,
+              // без мигания и с переездом маркеров (см. autoRefreshTick)
+              st.group.update(fresh, 0);
+            } else if (dataChanged(cached, fresh)) {
               const newGroup = buildGroupFor(st, fresh);
               if (st.group) map.removeLayer(st.group);
               st.group = newGroup;
@@ -714,7 +726,10 @@ const MapApp = (function () {
   // синхронно увидели бы пустой st.cache и оба сходили бы на сервер отдельно.
   function fetchLayerDataShared(st, id) {
     if (!st.pending) {
-      st.pending = fetchLayerDataRaw(st, id).finally(() => { st.pending = null; });
+      // Снимаем только СВОЙ promise: после invalidateLayerCache в st.pending мог
+      // уже лежать новый запрос, и старый finally не должен его затирать.
+      const p = fetchLayerDataRaw(st, id).finally(() => { if (st.pending === p) st.pending = null; });
+      st.pending = p;
     }
     return st.pending;
   }
@@ -758,24 +773,33 @@ const MapApp = (function () {
       load: () => MapAPI.getLayerSettings(id),
       save: values => MapAPI.saveLayerSettings(id, values),
       onApplied: async () => {
-        // Настройки изменились — старый кэш данных слоя относится к прежнему
+        // Кроме самого слоя, перечитываем зависимые от его настроек слои
+        // (BackendPlugin.dependentLayers — например, у «Чистых дорог» период
+        // Треков определяет цвет маркировки ЗоныВыполненияРабот). Какие слои
+        // связаны — знание базы, а не ядра, поэтому список в плагине.
+        const deps = (BackendPlugin.dependentLayers && BackendPlugin.dependentLayers[id]) || [];
+        const affected = [id].concat(deps).filter(l => layerState[l]);
+
+        // Настройки изменились — старый кэш данных относится к прежнему
         // фильтру и никогда не должен всплыть при следующем включении, даже
-        // если слой сейчас выключен.
-        if (layerState[id]) {
-          layerState[id].cache = null;
-        }
+        // если слой сейчас выключен (см. invalidateLayerCache: заодно глушит
+        // ещё идущий запрос по старому фильтру).
+        affected.forEach(l => invalidateLayerCache(layerState[l]));
+
         // /layers читается один раз при старте (см. loadLayers), поэтому
-        // сохранённые в фильтрах флаги вроде highlightNoRoute (см.
+        // сохранённые в фильтрах флаги вроде overlays/legend (см.
         // buildVectorGroupInner) в st.meta иначе останутся устаревшими до
-        // перезагрузки страницы. Обновляем ТОЛЬКО meta нужного слоя — панель
+        // перезагрузки страницы. Обновляем ТОЛЬКО meta затронутых слоёв — панель
         // слоёв (порядок, тумблеры, счётчики, состояние групп) не трогаем.
         // Ошибка запроса не фатальна — настройки уже сохранены на сервере,
         // просто логируем и продолжаем передёргивание слоя со старым meta.
-        if (layerState[id]) {
+        if (affected.length) {
           try {
             const freshLayers = await MapAPI.getLayers();
-            const freshMeta = freshLayers.find(l => l.id === id);
-            if (freshMeta) layerState[id].meta = freshMeta;
+            affected.forEach(l => {
+              const freshMeta = freshLayers.find(m => m.id === l);
+              if (freshMeta) layerState[l].meta = freshMeta;
+            });
           } catch (e) {
             console.error('openLayerSettings: не удалось обновить meta слоя после сохранения настроек', id, e);
           }
@@ -783,18 +807,38 @@ const MapApp = (function () {
           // а DOM панели слоёв после старта сам не пересобирается: без этого
           // вызова пользователь увидел бы разноцветные треки при легенде от
           // прежнего фильтра.
-          renderLayerLegend(id);
+          affected.forEach(renderLayerLegend);
         }
+        // meta.refresh слоя ТС мог измениться — перезапускаем таймер
+        // автообновления (см. «Автообновление слоя ТС»).
+        restartAutoRefresh();
+
         // Слой уже включён — перечитываем его данные с новыми фильтрами тем же
         // безопасным путём (token-guard в toggleLayer), что и обычный тумблер.
-        // Кэш уже очищен выше, поэтому toggleLayer(id, true) пойдёт холодным
+        // Кэш уже очищен выше, поэтому toggleLayer(l, true) пойдёт холодным
         // путём, а не мгновенно покажет данные по старому фильтру.
-        if (layerState[id] && layerState[id].on) {
-          await toggleLayer(id, false);
-          await toggleLayer(id, true);
+        for (const l of affected) {
+          if (layerState[l].on) {
+            await toggleLayer(l, false);
+            await toggleLayer(l, true);
+          }
         }
       }
     });
+  }
+
+  // Сброс кэша слоя так, чтобы ни один ещё идущий запрос по старым настройкам
+  // не смог потом положить свои данные в st.cache. Без этого гонка: прогрев при
+  // старте (prefetchLayer) ушёл с прежним фильтром, пользователь сохранил
+  // настройки, кэш обнулили — и тут старый запрос отвечает и записывает
+  // устаревшие данные; а холодное включение через fetchLayerDataShared ещё и
+  // переиспользовало бы тот самый старый st.pending. Поколение (st.gen)
+  // сравнивают все, кто пишет в st.cache после await.
+  function invalidateLayerCache(st) {
+    if (!st) return;
+    st.gen = (st.gen || 0) + 1;
+    st.cache = null;
+    st.pending = null;
   }
 
   /**
@@ -1082,7 +1126,7 @@ const MapApp = (function () {
   async function refreshLayer(layerId) {
     const st = layerState[layerId];
     if (!st) return;
-    st.cache = null;
+    invalidateLayerCache(st);
     if (st.on) {
       await toggleLayer(layerId, false);
       await toggleLayer(layerId, true);
@@ -1775,20 +1819,113 @@ const MapApp = (function () {
   const RealMarkerLayerHandle = L.Layer.extend({
     initialize(id, meta, data) {
       this._id = id; this._meta = meta; this._data = data; this._markers = null;
+      this._byId = null;   // obj.id -> marker, для обновления на месте (update)
     },
     onAdd() {
       const cluster = ensureRealMarkerCluster();
-      this._markers = this._data.map(obj => {
-        const marker = buildPointMarker(this._meta, obj);
-        marker.options.clusterColor = obj.idCluster || obj.color || this._meta.color;
-        bindObject(marker, this._id, obj);
-        return marker;
-      });
+      this._byId = new Map();
+      this._markers = this._data.map(obj => this._buildMarker(obj));
       cluster.addLayers(this._markers); // bulk-метод — не addLayer() в цикле, см. "Производительность" про chunkedLoading
     },
     onRemove() {
+      if (this._markers) this._markers.forEach(finishMarkerSlide);
       if (realMarkerCluster && this._markers) realMarkerCluster.removeLayers(this._markers);
       this._markers = null;
+      this._byId = null;
+    },
+    _buildMarker(obj) {
+      // Слой с автообновлением (meta.refresh) поворачивает иконку на месте —
+      // нужен divIcon с <img> и при нулевом азимуте (buildPointMarker даёт
+      // тогда L.icon без обёртки). rotate(360deg) выглядит как 0 — тот же
+      // приём, что у маркера воспроизведения (buildPlaybackMarker).
+      const marker = buildPointMarker(this._meta, this._iconObj(obj));
+      marker.options.clusterColor = obj.idCluster || obj.color || this._meta.color;
+      marker._obj = obj;
+      bindObject(marker, this._id, obj);
+      if (this._byId) this._byId.set(obj.id, marker);
+      return marker;
+    },
+    _iconObj(obj) {
+      return Number(this._meta.refresh) > 0 ? Object.assign({}, obj, { azimuth: Number(obj.azimuth) || 360 }) : obj;
+    },
+    // Обновление по id вместо пересборки слоя — порт Map_js.downLoudObjektsdot
+    // с Clear=false (нативная карта, автообновление ТС): пропавшие объекты
+    // убираем, новые добавляем, у существующих меняем подсказку, иконку/поворот
+    // и позицию. Маркер, видимый отдельно (marker._map), плавно переезжает за
+    // durationMs; маркер внутри кластера (или за экраном) — просто setLatLng,
+    // как в 1С (там slideTo без _map ничего не делает). Не добавленный на карту
+    // хэндл просто запоминает данные — маркеры построятся в onAdd.
+    update(data, durationMs) {
+      this._data = data;
+      if (!this._markers || !realMarkerCluster) return;
+      const cluster = realMarkerCluster;
+      const fresh = new Map(data.map(obj => [obj.id, obj]));
+
+      const removed = [];
+      this._byId.forEach((marker, id) => {
+        if (!fresh.has(id)) { finishMarkerSlide(marker); removed.push(marker); this._byId.delete(id); }
+      });
+      if (removed.length) cluster.removeLayers(removed);
+
+      const added = [], recolored = [];
+      data.forEach(obj => {
+        const marker = this._byId.get(obj.id);
+        if (!marker) { added.push(this._buildMarker(obj)); return; }
+        if (this._updateMarker(marker, obj, durationMs)) recolored.push(marker);
+      });
+      if (added.length) cluster.addLayers(added);
+      if (recolored.length) cluster.refreshClusters(recolored);   // доли pie-иконок кластеров
+
+      this._markers = Array.from(this._byId.values());
+    },
+    // Возвращает true, если сменился цвет для кластера.
+    _updateMarker(marker, obj, durationMs) {
+      const old = marker._obj || {};
+      marker._obj = obj;
+
+      if (obj.name !== old.name) {
+        if (!obj.name) marker.unbindTooltip();
+        else if (marker.getTooltip()) marker.setTooltipContent(obj.name);
+        else marker.bindTooltip(obj.name, OBJECT_TOOLTIP_OPTIONS);
+      }
+
+      const color = obj.idCluster || obj.color || this._meta.color;
+      const recolored = color !== marker.options.clusterColor;
+      marker.options.clusterColor = color;
+
+      // Иконка. Сменилась картинка/цвет — новая иконка целиком; сменился только
+      // азимут — крутим <img> на месте (без пересоздания DOM-узла, иначе
+      // маркер мигает), а в options кладём новую иконку, чтобы при следующем
+      // показе (разлёт кластера) узел создался уже с новым углом.
+      const iconChanged = obj.img !== old.img || recolored;
+      const azChanged = Number(obj.azimuth) !== Number(old.azimuth);
+      if (iconChanged || azChanged) {
+        const icon = buildPointMarker(this._meta, this._iconObj(obj)).options.icon;
+        if (iconChanged || !marker._icon) marker.setIcon(icon);
+        else { marker.options.icon = icon; rotatePlaybackMarker(marker, Number(obj.azimuth) || 360); }
+      }
+
+      const to = L.latLng(pointCoords(obj));
+      if (!marker._slideHold && marker.getLatLng().equals(to)) return recolored;
+      if (marker._map && durationMs > 0) {
+        // Кластер перестраивал бы сетку на каждом кадре анимации (move →
+        // _moveChild = removeLayer+addLayer). Его же протокол перетаскивания
+        // это глушит: после dragstart движения игнорируются, а dragend один
+        // раз переносит маркер со стартовой точки в конечную. Повторный опрос
+        // посреди анимации — продолжаем от текущей (интерполированной) точки,
+        // dragstart второй раз не шлём: стартовая точка сетки — первая.
+        if (!marker._slideHold) {
+          marker.fire('dragstart');
+          marker._slideHold = true;
+          marker.once('moveend', () => finishMarkerSlide(marker));
+        }
+        marker.slideCancel();
+        marker.slideTo(to, { duration: durationMs });
+      } else {
+        finishMarkerSlide(marker);
+        marker.setLatLng(to);
+      }
+      return recolored;
     },
     // Свои маркеры уже отдельным массивом — findLayer() ищет именно в
     // пределах вызвавшего слоя, и это ровно то, что нужно, без какой-либо
@@ -1798,6 +1935,81 @@ const MapApp = (function () {
       return this;
     }
   });
+
+  // Завершает «перетаскивание» маркера, начатое плавным переездом (см.
+  // RealMarkerLayerHandle._updateMarker): останавливает анимацию там, где она
+  // есть, и отдаёт кластеру dragend — тот один раз переносит маркер в сетке со
+  // стартовой точки в текущую. Без этого перед removeLayers кластер искал бы
+  // маркер в сетке по текущим координатам и не нашёл бы. Повторный вызов — no-op.
+  function finishMarkerSlide(marker) {
+    if (!marker._slideHold) return;
+    marker._slideHold = false;
+    marker.slideCancel();
+    marker.fire('dragend');
+  }
+
+  // =====================================================================
+  //  Автообновление точечного слоя (meta.refresh, секунды)
+  // =====================================================================
+  // Порт ПодключитьОбработчикОжидания нативной Картографии (у «Чистых дорог» —
+  // слой ТС, период из ФильтрыТранспортныеСредства.АвтообновлениеДанных; 0 —
+  // без автообновления). Таймер тикает, только пока слой включён, открыт вид
+  // «Карта» (AppShell → setViewActive) и вкладка браузера видима — скрытая карта
+  // не опрашивает сервер. Данные применяются на месте (RealMarkerLayerHandle.
+  // update), без пересборки слоя: маркеры не мигают и плавно переезжают.
+  const autoRefreshTimers = {};   // layerId -> id setInterval
+  let mapViewActive = true;
+
+  function autoRefreshPeriod(st) {
+    const sec = Number(st && st.meta && st.meta.refresh);
+    return st && st.meta.type === 'point' && sec > 0 ? sec : 0;
+  }
+
+  // immediate — сразу один опрос (возврат на вкладку/вид после паузы: данные
+  // могли сильно устареть), иначе первый — через период.
+  function restartAutoRefresh(immediate) {
+    Object.keys(autoRefreshTimers).forEach(id => {
+      clearInterval(autoRefreshTimers[id]);
+      delete autoRefreshTimers[id];
+    });
+    if (!mapViewActive || document.hidden) return;
+    Object.keys(layerState).forEach(id => {
+      const st = layerState[id];
+      const sec = autoRefreshPeriod(st);
+      if (!st.on || !sec) return;
+      autoRefreshTimers[id] = setInterval(() => autoRefreshTick(id), sec * 1000);
+      if (immediate) autoRefreshTick(id);
+    });
+  }
+
+  async function autoRefreshTick(id) {
+    const st = layerState[id];
+    if (!st || !st.on || st.autoRefreshBusy) return;
+    // Только слой, уже построенный как RealMarkerLayerHandle: пока идёт первая
+    // загрузка (st.group ещё нет) или слой не кластерный — опрос пропускаем.
+    if (!(st.group instanceof RealMarkerLayerHandle)) return;
+    const token = st.token, gen = st.gen;
+    st.autoRefreshBusy = true;
+    try {
+      const data = await fetchLayerDataShared(st, id);
+      // слой выключили/перевключили или сменили настройки, пока шёл запрос
+      if (st.token !== token || st.gen !== gen || !st.on || !(st.group instanceof RealMarkerLayerHandle)) return;
+      st.group.update(data, Math.min(autoRefreshPeriod(st), 10) * 1000);
+      st.cache = data;
+      setCount(document.querySelector(`.layer-item[data-id="${id}"]`), data.length);
+    } catch (e) {
+      console.warn('[MapApp] автообновление слоя не удалось', id, e);
+    } finally {
+      st.autoRefreshBusy = false;
+    }
+  }
+
+  // Вызывает AppShell.showView при каждом переключении экрана.
+  function setViewActive(active) {
+    if (mapViewActive === active) return;
+    mapViewActive = active;
+    restartAutoRefresh(active);
+  }
 
   // =====================================================================
   //  Canvas-иконки для больших точечных слоёв
@@ -2098,16 +2310,19 @@ const MapApp = (function () {
       html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid #fff"></div>` });
   }
 
+  // direction:'left' + offset:[-10,-10] + opacity:0.8 — тот же приём, что и
+  // в нативной 1С-карте АнализАварийности (CommonTemplates/Map_js,
+  // Map.prototype.addPolygon), подсказка встаёт сбоку от объекта, а не
+  // прямо над/в центре него. Для точек — как есть (см. также
+  // RealMarkerLayerHandle._updateMarker).
+  const OBJECT_TOOLTIP_OPTIONS = { className: 'map-tip', direction: 'left', offset: [-10, -10], opacity: 0.8 };
+
   function bindObject(lyr, layerId, obj, geomType) {
     lyr._objId = obj.id;
     // name — формат 1С (см. Каталог.*.ЗаполнитьСведенияДляКарты): текстовая
     // подсказка объекта на нативной карте тоже строится из этого поля.
-    // direction:'left' + offset:[-10,-10] + opacity:0.8 — тот же приём, что и
-    // в нативной 1С-карте АнализАварийности (CommonTemplates/Map_js,
-    // Map.prototype.addPolygon), подсказка встаёт сбоку от объекта, а не
-    // прямо над/в центре него.
     if (obj.name) {
-      const tooltipOptions = { className: 'map-tip', direction: 'left', offset: [-10, -10], opacity: 0.8 };
+      const tooltipOptions = OBJECT_TOOLTIP_OPTIONS;
       if (geomType === 'polygon') {
         // Полигоны — подсказка зафиксирована у центра фигуры (без sticky
         // Leaflet сам открывает тултип в getCenter() слоя), а не бежит за
@@ -2462,7 +2677,7 @@ const MapApp = (function () {
     if (map) map.invalidateSize();
   }
 
-  return { init, toggleLayer, centerOn, closeDetail, closeMapCommandDetail, selectObject, playTrack, stopTrackPlayback, refreshSize, refreshLayer };
+  return { init, toggleLayer, centerOn, closeDetail, closeMapCommandDetail, selectObject, playTrack, stopTrackPlayback, refreshSize, refreshLayer, setViewActive };
 })();
 
 window.MapApp = MapApp;
